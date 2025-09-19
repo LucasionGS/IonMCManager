@@ -11,6 +11,7 @@ services:
       - ./server:/app/server
       - server_node_modules:/app/server/node_modules
       - client_node_modules:/app/client/node_modules
+      - minecraft_servers:/app/minecraft_servers
 
     ports:
       - "${PORT:-3174}:${INTERNAL_PORT:-3174}"
@@ -49,4 +50,6 @@ volumes:
   server_node_modules:
     driver: local
   client_node_modules:
+    driver: local
+  minecraft_servers:
     driver: local

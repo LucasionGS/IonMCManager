@@ -1,29 +1,33 @@
-import AppShell from './layouts/AppShell'
-import { SocketProvider } from './contexts/SocketContext'
-import './App.scss'
+import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import AppShell from './layouts/AppShell';
+import { SocketProvider } from './contexts/SocketContext';
+import { AuthProvider } from './contexts/AuthContext';
+import ProtectedRoute from './components/ProtectedRoute';
+import HomePage from './pages/HomePage';
+import InstancesPage from './pages/InstancesPage';
+import ServerManagePage from './pages/ServerManagePage';
+import UsersPage from './pages/UsersPage';
+import './App.scss';
 
 function App() {
   return (
-    <SocketProvider>
-      <AppShell>
-        <div className="page-content">
-          <h1>Welcome to MCSManager</h1>
-          <p>This is where the main content will go. The terminal, file manager, and other instance controls will be implemented here.</p>
-          
-          <div className="placeholder-content">
-            <h2>Coming Soon:</h2>
-            <ul>
-              <li>Terminal Interface</li>
-              <li>File Manager</li>
-              <li>Server Configuration</li>
-              <li>Player Management</li>
-              <li>Plugin Manager</li>
-            </ul>
-          </div>
-        </div>
-      </AppShell>
-    </SocketProvider>
-  )
+    <AuthProvider>
+      <ProtectedRoute>
+        <SocketProvider>
+          <Router>
+            <AppShell>
+              <Routes>
+                <Route path="/" element={<HomePage />} />
+                <Route path="/instances" element={<InstancesPage />} />
+                <Route path="/servers/:serverId/manage" element={<ServerManagePage />} />
+                <Route path="/users" element={<UsersPage />} />
+              </Routes>
+            </AppShell>
+          </Router>
+        </SocketProvider>
+      </ProtectedRoute>
+    </AuthProvider>
+  );
 }
 
-export default App
+export default App;

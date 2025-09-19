@@ -1,5 +1,8 @@
 import { Router } from "express";
 import UpgradeController from "./UpgradeController.ts";
+import AuthController from "./AuthController.ts";
+import ServerController from "./ServerController.ts";
+import AdminController from "./AdminController.ts";
 
 namespace ApiController {
   export const router = Router();
@@ -9,6 +12,9 @@ namespace ApiController {
   });
 
   router.use("/upgrade", UpgradeController.router);
+  router.use("/auth", AuthController.router);
+  router.use("/servers", ServerController.router);
+  router.use("/admin", AdminController.router);
 }
 
 export default ApiController;

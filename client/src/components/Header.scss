@@ -102,10 +102,44 @@
 .header__actions {
   display: flex;
   gap: 0.5rem;
+  align-items: center;
   flex-shrink: 0;
   
   @media (max-width: 768px) {
     gap: 0.25rem;
+  }
+}
+
+.header__user-menu {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.25rem 0.5rem;
+  background-color: rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
+  
+  @media (max-width: 768px) {
+    padding: 0.2rem 0.4rem;
+    gap: 0.3rem;
+  }
+}
+
+.header__username {
+  color: #ffffff;
+  font-size: 0.875rem;
+  font-weight: 500;
+  white-space: nowrap;
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  
+  @media (max-width: 768px) {
+    font-size: 0.8rem;
+    max-width: 80px;
+  }
+  
+  @media (max-width: 480px) {
+    display: none; // Hide username on very small screens
   }
 }
 
@@ -132,5 +166,14 @@
   &:hover {
     color: #ffffff;
     background-color: #444444;
+  }
+}
+
+.header__logout-btn {
+  color: #ff7675;
+  
+  &:hover {
+    color: #ffffff;
+    background-color: #e17055;
   }
 }

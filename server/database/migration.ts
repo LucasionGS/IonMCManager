@@ -4,7 +4,7 @@ import sequelize from "./sequelize.ts";
 import { QueryInterface } from "sequelize";
 import fs from "node:fs";
 import path from "node:path";
-// import process from "node:process";
+import process from "node:process";
 
 const migrationsPath = path.join(import.meta.dirname!, "migrations");
 
@@ -78,7 +78,12 @@ async function getMigrationFiles(): Promise<DBMigration[]> {
     .filter(file => file.endsWith(".ts"))
     .map(async file => {
       const mod = (await import(path.join(migrationsPath, file))).default as DBMigration;
-      mod.version = file.replace(/\.ts$/, "");
+      try {
+        mod.version = file.replace(/\.ts$/, "");
+      } catch (error) {
+        console.error(`Error setting version for migration ${file}:`, error);
+        process.exit()
+      }
       return mod
     })
   )

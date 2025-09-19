@@ -1,4 +1,5 @@
-import pty, { IPty } from "node-pty";
+import { Buffer } from "node:buffer";
+import { spawn, ChildProcess } from "node:child_process";
 import { EventEmitter } from "node:events";
 import { existsSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
@@ -32,7 +33,7 @@ export default class MinecraftServer extends EventEmitter {
   private name: string;
   private config: MinecraftServerConfig;
   private status: ServerStatus['status'] = 'stopped';
-  private ptyProcess: IPty | null = null;
+  private childProcess: ChildProcess | null = null;
   private startTime: number | null = null;
   private players: Set<string> = new Set();
   private maxPlayers: number = 20;
@@ -82,11 +83,10 @@ export default class MinecraftServer extends EventEmitter {
         ...(this.config.serverArgs || [])
       ];
 
-      this.ptyProcess = pty.spawn('java', javaArgs, {
+      this.childProcess = spawn('java', javaArgs, {
         cwd: this.config.serverPath,
-        env: { ...process.env, TERM: 'xterm-256color' },
-        cols: 120,
-        rows: 30
+        env: { ...process.env },
+        stdio: ['pipe', 'pipe', 'pipe']
       });
 
       this.setupProcessHandlers();
@@ -109,28 +109,28 @@ export default class MinecraftServer extends EventEmitter {
     this.setStatus('stopping');
     this.emit('stopping', { serverId: this.id });
 
-    if (!this.ptyProcess) {
+    if (!this.childProcess) {
       this.setStatus('stopped');
       return Promise.resolve(true);
     }
 
     if (force) {
-      this.ptyProcess.kill('SIGKILL');
+      this.childProcess.kill('SIGKILL');
     } else {
       // Graceful shutdown
       this.executeCommand('stop');
       
       // Wait up to 30 seconds for graceful shutdown
       const timeout = setTimeout(() => {
-        if (this.ptyProcess) {
-          this.ptyProcess.kill('SIGTERM');
+        if (this.childProcess) {
+          this.childProcess.kill('SIGTERM');
         }
       }, 30000);
 
       // Clear timeout when process exits
-      this.ptyProcess.onExit((data) => {
+      this.childProcess.on('exit', (code) => {
         clearTimeout(timeout);
-        this.handleProcessExit(data.exitCode);
+        this.handleProcessExit(code || 0);
       });
     }
 
@@ -158,13 +158,16 @@ export default class MinecraftServer extends EventEmitter {
   }
 
   public executeCommand(command: string): boolean {
-    if (!this.ptyProcess || this.status !== 'running') {
+    if (!this.childProcess || this.status !== 'running') {
       return false;
     }
 
-    this.ptyProcess.write(`${command}\r`);
-    this.emit('command', { serverId: this.id, command });
-    return true;
+    if (this.childProcess.stdin) {
+      this.childProcess.stdin.write(`${command}\n`);
+      this.emit('command', { serverId: this.id, command });
+      return true;
+    }
+    return false;
   }
 
   public getStatus(): ServerStatus {
@@ -224,30 +227,64 @@ export default class MinecraftServer extends EventEmitter {
   }
 
   private setupProcessHandlers(): void {
-    if (!this.ptyProcess) return;
+    if (!this.childProcess) return;
 
-    this.ptyProcess.onData((data: string) => {
-      this.handleOutput(data);
+    this.childProcess.stdout?.on('data', (data: Buffer) => {
+      this.handleOutput(data.toString());
     });
 
-    this.ptyProcess.onExit((data) => {
-      this.handleProcessExit(data.exitCode);
+    this.childProcess.stderr?.on('data', (data: Buffer) => {
+      this.handleOutput(data.toString());
+    });
+
+    this.childProcess.on('exit', (code) => {
+      this.handleProcessExit(code || 0);
+    });
+
+    this.childProcess.on('error', (error) => {
+      this.emit('error', { serverId: this.id, error: error.message });
     });
   }
 
   private handleOutput(data: string): void {
-    const lines = data.split('\n').filter(line => line.trim());
+    if (!data || typeof data !== 'string') {
+      return;
+    }
+
+    // Split by newlines and filter out empty lines
+    const lines = data.split(/\r?\n/).filter(line => line.trim().length > 0);
     
     for (const line of lines) {
-      this.addToOutputBuffer(line);
-      this.parseLogLine(line);
-      this.emit('output', { serverId: this.id, output: line, timestamp: new Date().toISOString() });
+      const trimmedLine = line.trim();
+      if (trimmedLine) {
+        this.addToOutputBuffer(trimmedLine);
+        this.parseLogLine(trimmedLine);
+        
+        const outputEvent = { 
+          serverId: this.id, 
+          output: trimmedLine, 
+          timestamp: new Date().toISOString() 
+        };
+        
+        // Only emit if we have valid data
+        if (outputEvent.serverId && outputEvent.output && outputEvent.timestamp) {
+          this.emit('output', outputEvent);
+        }
+      }
     }
   }
 
   private parseLogLine(line: string): void {
-    // Remove ANSI color codes using unicode escape
-    const cleanLine = line.replace(/\u001B\[[0-9;]*m/g, '');
+    if (!line || typeof line !== 'string') {
+      return;
+    }
+
+    // Remove ANSI color codes and other escape sequences
+    const cleanLine = line.replace(/\u001B\[[0-9;]*[mGKF]/g, '').trim();
+    
+    if (!cleanLine) {
+      return;
+    }
     
     // Server started
     if (cleanLine.includes('Done (') && cleanLine.includes('s)! For help, type "help"')) {
@@ -298,7 +335,7 @@ export default class MinecraftServer extends EventEmitter {
   }
 
   private handleProcessExit(exitCode: number): void {
-    this.ptyProcess = null;
+    this.childProcess = null;
     this.startTime = null;
     this.players.clear();
     
@@ -340,8 +377,8 @@ export default class MinecraftServer extends EventEmitter {
   }
 
   public destroy(): void {
-    if (this.ptyProcess) {
-      this.ptyProcess.kill('SIGKILL');
+    if (this.childProcess) {
+      this.childProcess.kill('SIGKILL');
     }
     this.removeAllListeners();
   }
