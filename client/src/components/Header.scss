@@ -1,0 +1,136 @@
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 1rem;
+  background-color: #333333;
+  border-bottom: 1px solid #555555;
+  height: 60px;
+  
+  @media (max-width: 768px) {
+    padding: 0 0.5rem;
+    height: 50px;
+  }
+}
+
+.header__brand {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.header__menu-btn {
+  display: none;
+  background: none;
+  border: none;
+  color: #ffffff;
+  font-size: 1.5rem;
+  cursor: pointer;
+  padding: 0.25rem;
+  
+  @media (max-width: 768px) {
+    display: block;
+  }
+  
+  &:hover {
+    color: #cccccc;
+  }
+}
+
+.header__logo {
+  font-size: 1.5rem;
+  font-weight: bold;
+  color: #ffffff;
+  letter-spacing: 2px;
+  
+  @media (max-width: 768px) {
+    font-size: 1.2rem;
+    letter-spacing: 1px;
+  }
+  
+  @media (max-width: 480px) {
+    font-size: 1rem;
+    letter-spacing: 0.5px;
+  }
+}
+
+.header__nav {
+  display: flex;
+  gap: 2rem;
+  flex: 1;
+  justify-content: center;
+  
+  @media (max-width: 1024px) {
+    gap: 1rem;
+  }
+  
+  @media (max-width: 768px) {
+    gap: 0.5rem;
+    margin: 0 0.5rem;
+  }
+  
+  @media (max-width: 640px) {
+    display: none; // Hide navigation on very small screens
+  }
+}
+
+.header__nav-item {
+  color: #cccccc;
+  text-decoration: none;
+  padding: 0.5rem 1rem;
+  border-radius: 4px;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+  
+  @media (max-width: 768px) {
+    padding: 0.3rem 0.6rem;
+    font-size: 0.875rem;
+  }
+  
+  &:hover {
+    color: #ffffff;
+    background-color: #444444;
+  }
+  
+  &--active {
+    color: #ffffff;
+    background-color: #555555;
+  }
+}
+
+.header__actions {
+  display: flex;
+  gap: 0.5rem;
+  flex-shrink: 0;
+  
+  @media (max-width: 768px) {
+    gap: 0.25rem;
+  }
+}
+
+.header__action-btn {
+  background: none;
+  border: none;
+  color: #cccccc;
+  padding: 0.5rem;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-size: 1.2rem;
+  
+  @media (max-width: 768px) {
+    padding: 0.4rem;
+    font-size: 1rem;
+  }
+  
+  @media (max-width: 480px) {
+    padding: 0.3rem;
+    font-size: 0.9rem;
+  }
+  
+  &:hover {
+    color: #ffffff;
+    background-color: #444444;
+  }
+}

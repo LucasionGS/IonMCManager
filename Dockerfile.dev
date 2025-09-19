@@ -1,0 +1,24 @@
+FROM ubuntu:24.04
+
+# Update package list and install dependencies
+RUN apt-get update && apt-get install -y \
+    curl \
+    unzip \
+    openjdk-21-jre-headless \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Deno
+RUN curl -fsSL https://deno.land/install.sh | sh
+
+ENV DENO_INSTALL="/root/.deno"
+ENV PATH="$DENO_INSTALL/bin:$PATH"
+
+# Verify Java installation
+RUN java -version
+
+# Install global dependencies
+RUN deno i -g npm:concurrently
+
+WORKDIR /app
+
+CMD ["sh", "-c", "cd /app/server && deno install --allow-scripts && cd /app/client && deno install --allow-scripts && deno run --allow-run --allow-env --allow-read --no-config npm:concurrently 'cd /app/server && deno task dev' 'cd /app/client && deno task dev'"]

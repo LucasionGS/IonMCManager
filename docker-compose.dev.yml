@@ -1,0 +1,52 @@
+services:
+  ionmc:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    env_file:
+      - .env
+    working_dir: /app
+    volumes:
+      - ./client:/app/client
+      - ./server:/app/server
+      - server_node_modules:/app/server/node_modules
+      - client_node_modules:/app/client/node_modules
+
+    ports:
+      - "${PORT:-3174}:${INTERNAL_PORT:-3174}"
+      - "${CLIENT_PORT:-5173}:5173"
+      - "9229:9229"  # Debug port for Deno
+    depends_on:
+      - db
+  
+  db:
+    image: mariadb:latest
+    container_name: ionmc_mariadb
+    env_file:
+      - .env
+    environment:
+      - MYSQL_ROOT_PASSWORD=${DB_PASSWORD}
+      - MYSQL_DATABASE=${DB_DATABASE}
+      - MYSQL_USER=${DB_USERNAME}
+      - MYSQL_PASSWORD=${DB_PASSWORD}
+
+  phpmyadmin:
+    image: phpmyadmin/phpmyadmin
+    container_name: ionmc_phpmyadmin
+    env_file:
+      - .env
+    environment:
+      - PMA_HOST=${DB_HOST}
+      - PMA_PORT=${DB_PORT}
+      - PMA_USER=${DB_USERNAME}
+      - PMA_PASSWORD=${DB_PASSWORD}
+      - PMA_ARBITRARY=1
+      - PMA_ABSOLUTE_URI=http://localhost:${PORT:-3174}/phpmyadmin/
+    depends_on:
+      - db
+
+volumes:
+  server_node_modules:
+    driver: local
+  client_node_modules:
+    driver: local
