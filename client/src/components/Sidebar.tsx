@@ -106,24 +106,40 @@ function Sidebar({ isOpen = false, onClose }: SidebarProps) {
             className={`sidebar__nav-item ${location.pathname === '/' ? 'sidebar__nav-item--active' : ''}`}
             onClick={handleLinkClick}
           >
-            Dashboard
+            🏠 Dashboard
           </Link>
           <Link 
             to="/instances" 
             className={`sidebar__nav-item ${location.pathname === '/instances' ? 'sidebar__nav-item--active' : ''}`}
             onClick={handleLinkClick}
           >
-            Instances
+            🖥️ Instances
           </Link>
           {/* Admin-only navigation */}
           {authState.user?.isAdmin && (
-            <Link 
-              to="/users" 
-              className={`sidebar__nav-item ${location.pathname === '/users' ? 'sidebar__nav-item--active' : ''}`}
-              onClick={handleLinkClick}
-            >
-              👥 Users
-            </Link>
+            <>
+              <Link 
+                to="/users" 
+                className={`sidebar__nav-item ${location.pathname === '/users' ? 'sidebar__nav-item--active' : ''}`}
+                onClick={handleLinkClick}
+              >
+                👥 Users
+              </Link>
+              <Link 
+                to="/monitoring" 
+                className={`sidebar__nav-item ${location.pathname === '/monitoring' ? 'sidebar__nav-item--active' : ''}`}
+                onClick={handleLinkClick}
+              >
+                📊 Monitoring
+              </Link>
+              <Link 
+                to="/error-logs" 
+                className={`sidebar__nav-item ${location.pathname === '/error-logs' ? 'sidebar__nav-item--active' : ''}`}
+                onClick={handleLinkClick}
+              >
+                🐛 Error Logs
+              </Link>
+            </>
           )}
         </nav>
       </div>

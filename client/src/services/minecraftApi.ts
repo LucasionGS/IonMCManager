@@ -1,3 +1,5 @@
+import errorReportingService from './errorReportingService';
+
 export interface MinecraftVersion {
   id: string;
   type: string;
@@ -438,6 +440,71 @@ class MinecraftApiService {
     
     if (!data.success) {
       throw new Error(data.message || 'Failed to fetch statistics');
+    }
+    
+    return data.data;
+  }
+
+  /**
+   * Get system metrics (admin only)
+   */
+  async getSystemMetrics(limit = 100) {
+    const response = await fetch(`/api/monitoring/metrics?limit=${limit}`, {
+      headers: this.getAuthHeaders(),
+    });
+    const data = await response.json();
+    
+    if (!data.success) {
+      throw new Error(data.message || 'Failed to fetch system metrics');
+    }
+    
+    return data.data;
+  }
+
+  /**
+   * Get system health status (admin only)
+   */
+  async getSystemHealth() {
+    const response = await fetch('/api/monitoring/health', {
+      headers: this.getAuthHeaders(),
+    });
+    const data = await response.json();
+    
+    if (!data.success) {
+      throw new Error(data.message || 'Failed to fetch system health');
+    }
+    
+    return data.data;
+  }
+
+  /**
+   * Get average system metrics (admin only)
+   */
+  async getAverageMetrics(hours = 24) {
+    const response = await fetch(`/api/monitoring/metrics/average?hours=${hours}`, {
+      headers: this.getAuthHeaders(),
+    });
+    const data = await response.json();
+    
+    if (!data.success) {
+      throw new Error(data.message || 'Failed to fetch average metrics');
+    }
+    
+    return data.data;
+  }
+
+  /**
+   * Cleanup old metrics data (admin only)
+   */
+  async cleanupMetrics(days = 30) {
+    const response = await fetch(`/api/monitoring/metrics/cleanup?days=${days}`, {
+      method: 'DELETE',
+      headers: this.getAuthHeaders(),
+    });
+    const data = await response.json();
+    
+    if (!data.success) {
+      throw new Error(data.message || 'Failed to cleanup metrics');
     }
     
     return data.data;

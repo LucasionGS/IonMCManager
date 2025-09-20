@@ -1,4 +1,5 @@
 import { createContext, useContext, useState, useEffect, type ReactNode } from 'react';
+import errorReportingService from '../services/errorReportingService';
 
 export interface User {
   id: number;
@@ -49,6 +50,11 @@ export function AuthProvider({ children }: AuthProviderProps) {
   useEffect(() => {
     checkAuth();
   }, []);
+
+  // Update error reporting service when auth state changes
+  useEffect(() => {
+    errorReportingService.setAuthToken(authState.token);
+  }, [authState.token]);
 
   const checkAuth = async (): Promise<boolean> => {
     const token = localStorage.getItem('token');
@@ -126,6 +132,14 @@ export function AuthProvider({ children }: AuthProviderProps) {
       }
     } catch (error) {
       console.error('Login error:', error);
+      errorReportingService.reportApiError(
+        error as Error,
+        {
+          url: `${apiUrl}/auth/login`,
+          method: 'POST',
+          statusCode: 0
+        }
+      );
       return { success: false, message: 'Network error. Please try again.' };
     }
   };

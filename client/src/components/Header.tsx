@@ -27,7 +27,7 @@ function Header({ onMenuToggle }: HeaderProps) {
         <span className="header__logo">IonMC Server Manager</span>
       </div>
       
-      <nav className="header__nav">
+      {/* <nav className="header__nav">
         <Link to="/" className={`header__nav-item ${location.pathname === '/' ? 'header__nav-item--active' : ''}`}>
           Dashboard
         </Link>
@@ -37,17 +37,19 @@ function Header({ onMenuToggle }: HeaderProps) {
         <Link to="/users" className={`header__nav-item ${location.pathname === '/users' ? 'header__nav-item--active' : ''}`}>
           Users
         </Link>
-        <a href="#" className="header__nav-item">Daemons</a>
+        <Link to="/monitoring" className={`header__nav-item ${location.pathname === '/monitoring' ? 'header__nav-item--active' : ''}`}>
+          Monitoring
+        </Link>
         <a href="#" className="header__nav-item">Settings</a>
-      </nav>
+      </nav> */}
       
       <div className="header__actions">
-        <button className="header__action-btn" title="Notifications">
+        {/* <button className="header__action-btn" title="Notifications">
           🔔
         </button>
         <button className="header__action-btn" title="Terminal">
           📟
-        </button>
+        </button> */}
         <div className="header__user-menu">
           <span className="header__username" title={authState.user?.email}>
             {authState.user?.username}
@@ -57,12 +59,12 @@ function Header({ onMenuToggle }: HeaderProps) {
             title="Logout"
             onClick={handleLogout}
           >
-            �
+            ⎋
           </button>
         </div>
-        <button className="header__action-btn" title="Refresh">
+        {/* <button className="header__action-btn" title="Refresh">
           🔄
-        </button>
+        </button> */}
       </div>
     </header>
   );

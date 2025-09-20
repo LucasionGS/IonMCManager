@@ -6,6 +6,7 @@ import process from "node:process";
 import ApiController from "./controllers/ApiController.ts";
 import sequelize from "./database/sequelize.ts";
 import metadata from "./metadata.ts";
+import MonitoringService from "./services/MonitoringService.ts";
 
 console.log(`Starting`, metadata);
 
@@ -20,6 +21,9 @@ const io = new Server(httpServer, {
 
 // Export io instance for use in other modules
 export { io };
+
+// Initialize monitoring service
+const monitoringService = new MonitoringService();
 
 const port = process.env.INTERNAL_PORT || 3174;
 
@@ -54,10 +58,19 @@ io.on("connection", (socket) => {
 
 // Start server
 async function startServer() {
-  httpServer.listen(port, () => {
-    console.log(`Server is running on port ${port}`);
-    console.log(`Socket.IO is ready for connections`);
-  });
+  try {
+    // Start monitoring service
+    monitoringService.startCollection();
+    
+    httpServer.listen(port, () => {
+      console.log(`Server is running on port ${port}`);
+      console.log(`Socket.IO is ready for connections`);
+      console.log(`System monitoring started`);
+    });
+  } catch (error) {
+    console.error('Failed to start server:', error);
+    process.exit(1);
+  }
 }
 
 startServer().catch(console.error);
