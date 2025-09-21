@@ -230,6 +230,24 @@ function ServerManagePage() {
     return `${mb.toFixed(0)} MB`;
   };
 
+  // Helper function to detect log level and return appropriate CSS class
+  const getLogLevelClass = (line: string): string => {
+    const upperLine = line.toUpperCase();
+    if (upperLine.includes('[ERROR]') || upperLine.includes('ERROR:') || upperLine.includes('SEVERE:')) {
+      return 'console-line--error';
+    }
+    if (upperLine.includes('[WARN]') || upperLine.includes('WARNING:') || upperLine.includes('WARN:')) {
+      return 'console-line--warning';
+    }
+    if (upperLine.includes('[INFO]') || upperLine.includes('INFO:')) {
+      return 'console-line--info';
+    }
+    if (upperLine.includes('[DEBUG]') || upperLine.includes('DEBUG:')) {
+      return 'console-line--debug';
+    }
+    return '';
+  };
+
   // Helper functions for button states and text
   const getStartButtonText = () => {
     switch (serverData?.status) {
@@ -420,7 +438,7 @@ function ServerManagePage() {
                 </div>
               ) : (
                 consoleOutput.map((line, index) => (
-                  <div key={index} className="console-line">
+                  <div key={index} className={`console-line ${getLogLevelClass(line)}`}>
                     {line}
                   </div>
                 ))
