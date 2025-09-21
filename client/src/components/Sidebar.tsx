@@ -25,7 +25,7 @@ function Sidebar({ isOpen = false, onClose }: SidebarProps) {
         setIsLoading(true);
         setError('');
         const userServers = await minecraftApiService.getUserServers();
-        setServers(userServers);
+        setServers(userServers.servers);
       } catch (err) {
         console.error('Error fetching servers:', err);
         setError(err instanceof Error ? err.message : 'Failed to load servers');

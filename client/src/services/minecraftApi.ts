@@ -1,5 +1,3 @@
-import errorReportingService from './errorReportingService';
-
 export interface MinecraftVersion {
   id: string;
   type: string;
@@ -26,6 +24,13 @@ export interface ServerType {
 export interface ForgeVersion {
   version: string;
   downloadUrl: string;
+}
+
+export interface UserServersResponse {
+  count: number;
+  serverLimit: number;
+  canCreateMore: boolean;
+  servers: ServerInstance[];
 }
 
 export interface CreateServerRequest {
@@ -207,7 +212,7 @@ class MinecraftApiService {
   /**
    * Get all servers for the current user
    */
-  async getUserServers(): Promise<ServerInstance[]> {
+  async getUserServers(): Promise<UserServersResponse> {
     const response = await fetch(this.baseUrl, {
       headers: this.getAuthHeaders(),
     });
@@ -217,7 +222,7 @@ class MinecraftApiService {
       throw new Error(data.message || 'Failed to fetch servers');
     }
     
-    return data.data.servers;
+    return data.data;
   }
 
   /**
@@ -398,11 +403,11 @@ class MinecraftApiService {
   /**
    * Update user server limit (admin only)
    */
-  async updateUserLimit(userId: number, serverLimit: number, isAdmin?: boolean) {
+  async updateUserLimit(userId: number, serverLimit: number) {
     const response = await fetch(`/api/admin/users/${userId}`, {
       method: 'PUT',
       headers: this.getAuthHeaders(),
-      body: JSON.stringify({ serverLimit, isAdmin }),
+      body: JSON.stringify({ serverLimit }),
     });
     const data = await response.json();
     

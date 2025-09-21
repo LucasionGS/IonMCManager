@@ -32,7 +32,6 @@ function UsersPage() {
   const [error, setError] = useState<string>('');
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [newServerLimit, setNewServerLimit] = useState<number>(5);
-  const [newIsAdmin, setNewIsAdmin] = useState<boolean>(false);
 
   useEffect(() => {
     if (!authState.user?.isAdmin) {
@@ -67,7 +66,6 @@ function UsersPage() {
   const handleEditUser = (user: User) => {
     setEditingUser(user);
     setNewServerLimit(user.serverLimit);
-    setNewIsAdmin(user.isAdmin);
   };
 
   const handleUpdateUser = async () => {
@@ -77,15 +75,14 @@ function UsersPage() {
       setError('');
       await minecraftApiService.updateUserLimit(
         editingUser.id, 
-        newServerLimit, 
-        newIsAdmin
+        newServerLimit
       );
       
       // Update the user in the list
       setUsers(prev => 
         prev.map(u => 
           u.id === editingUser.id 
-            ? { ...u, serverLimit: newServerLimit, isAdmin: newIsAdmin }
+            ? { ...u, serverLimit: newServerLimit }
             : u
         )
       );
@@ -270,16 +267,6 @@ function UsersPage() {
                   onChange={(e) => setNewServerLimit(parseInt(e.target.value))}
                   className="form-input"
                 />
-              </div>
-              <div className="form-group">
-                <label className="checkbox-label">
-                  <input
-                    type="checkbox"
-                    checked={newIsAdmin}
-                    onChange={(e) => setNewIsAdmin(e.target.checked)}
-                  />
-                  <span>Administrator privileges</span>
-                </label>
               </div>
             </div>
             <div className="modal__footer">

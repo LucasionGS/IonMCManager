@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import CreateServerForm from '../components/CreateServerForm';
-import { useAuth } from '../contexts/AuthContext';
 import { useSocket } from '../contexts/SocketContext';
 import minecraftApiService from '../services/minecraftApi';
 import './InstancesPage.scss';
@@ -35,11 +34,13 @@ interface ServerInstance {
 }
 
 function InstancesPage() {
-  const { authState } = useAuth();
   const { socket, isConnected } = useSocket();
   const navigate = useNavigate();
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [servers, setServers] = useState<ServerInstance[]>([]);
+  const [serverCount, setServerCount] = useState(0);
+  const [serverLimit, setServerLimit] = useState(0);
+  const [canCreateMore, setCanCreateMore] = useState(true);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -49,8 +50,11 @@ function InstancesPage() {
       try {
         setIsLoading(true);
         setError('');
-        const userServers = await minecraftApiService.getUserServers();
-        setServers(userServers);
+        const response = await minecraftApiService.getUserServers();
+        setServers(response.servers);
+        setServerCount(response.count);
+        setServerLimit(response.serverLimit);
+        setCanCreateMore(response.canCreateMore);
       } catch (err) {
         console.error('Error loading servers:', err);
         setError(err instanceof Error ? err.message : 'Failed to load servers');
@@ -121,6 +125,10 @@ function InstancesPage() {
   }, [socket, isConnected]);
 
   const handleCreateServer = () => {
+    if (!canCreateMore) {
+      setError(`Server limit reached. You can create up to ${serverLimit} server${serverLimit !== 1 ? 's' : ''}.`);
+      return;
+    }
     setShowCreateForm(true);
   };
 
@@ -132,10 +140,13 @@ function InstancesPage() {
     console.log('Server created:', serverData);
     setShowCreateForm(false);
     
-    // Refresh server list
+    // Refresh server list and limit info
     try {
-      const userServers = await minecraftApiService.getUserServers();
-      setServers(userServers);
+      const response = await minecraftApiService.getUserServers();
+      setServers(response.servers);
+      setServerCount(response.count);
+      setServerLimit(response.serverLimit);
+      setCanCreateMore(response.canCreateMore);
     } catch (err) {
       console.error('Error refreshing servers:', err);
     }
@@ -148,7 +159,12 @@ function InstancesPage() {
       if (action === 'delete') {
         if (confirm('Are you sure you want to delete this server? This action cannot be undone.')) {
           await minecraftApiService.deleteServer(serverId);
-          setServers(prev => prev.filter(s => s.id !== serverId));
+          // Refresh server list and limit info after deletion
+          const response = await minecraftApiService.getUserServers();
+          setServers(response.servers);
+          setServerCount(response.count);
+          setServerLimit(response.serverLimit);
+          setCanCreateMore(response.canCreateMore);
         }
       } else {
         // Optimistically update to show immediate feedback
@@ -169,8 +185,11 @@ function InstancesPage() {
       
       // Refresh servers to get actual status if there was an error
       try {
-        const userServers = await minecraftApiService.getUserServers();
-        setServers(userServers);
+        const response = await minecraftApiService.getUserServers();
+        setServers(response.servers);
+        setServerCount(response.count);
+        setServerLimit(response.serverLimit);
+        setCanCreateMore(response.canCreateMore);
       } catch (refreshErr) {
         console.error('Error refreshing servers after failed action:', refreshErr);
       }
@@ -223,18 +242,28 @@ function InstancesPage() {
         <div className="instances-page__title-section">
           <h1>Server Instances</h1>
           <p>Manage your Minecraft servers</p>
-          <div className="instances-page__connection-status">
-            <span 
-              className={`connection-indicator ${isConnected ? 'connected' : 'disconnected'}`}
-              title={isConnected ? 'Real-time updates active' : 'Real-time updates disconnected'}
-            >
-              {isConnected ? '🟢' : '🔴'} {isConnected ? 'Live' : 'Offline'}
-            </span>
+          <div className="instances-page__stats">
+            <div className="instances-page__server-count">
+              <span className="server-count-label">Servers:</span>
+              <span className={`server-count-value ${serverCount >= serverLimit ? 'server-count-value--limit' : ''}`}>
+                {serverCount}/{serverLimit}
+              </span>
+            </div>
+            <div className="instances-page__connection-status">
+              <span 
+                className={`connection-indicator ${isConnected ? 'connected' : 'disconnected'}`}
+                title={isConnected ? 'Real-time updates active' : 'Real-time updates disconnected'}
+              >
+                {isConnected ? '🟢' : '🔴'} {isConnected ? 'Live' : 'Offline'}
+              </span>
+            </div>
           </div>
         </div>
         <button 
-          className="instances-page__create-btn"
+          className={`instances-page__create-btn ${!canCreateMore ? 'instances-page__create-btn--disabled' : ''}`}
           onClick={handleCreateServer}
+          disabled={!canCreateMore}
+          title={!canCreateMore ? `Server limit reached (${serverCount}/${serverLimit})` : `Create new server (${serverCount}/${serverLimit})`}
         >
           + Create Server
         </button>
@@ -257,13 +286,19 @@ function InstancesPage() {
             <div className="instances-page__empty">
               <div className="instances-page__empty-icon">🎮</div>
               <h2>No servers yet</h2>
-              <p>Create your first Minecraft server to get started!</p>
-              <button 
-                className="instances-page__empty-create-btn"
-                onClick={handleCreateServer}
-              >
-                Create Your First Server
-              </button>
+              {canCreateMore ? (
+                <>
+                  <p>Create your first Minecraft server to get started!</p>
+                  <button 
+                    className="instances-page__empty-create-btn"
+                    onClick={handleCreateServer}
+                  >
+                    Create Your First Server
+                  </button>
+                </>
+              ) : (
+                <p>You have reached your server limit of {serverLimit} server{serverLimit !== 1 ? 's' : ''}.</p>
+              )}
             </div>
           ) : (
             <div className="instances-page__grid">

@@ -18,7 +18,7 @@ namespace ServerController {
   const serverControlService = new ServerControlService();
 
   // Get available Minecraft versions
-  router.get('/versions', async (req: Request, res: Response) => {
+  router.get('/versions', async (_req: Request, res: Response) => {
     try {
       const manifest = await MinecraftApi.getServerVersions();
       
@@ -109,7 +109,7 @@ namespace ServerController {
   });
 
   // Get available server types
-  router.get('/types', (req: Request, res: Response) => {
+  router.get('/types', (_req: Request, res: Response) => {
     try {
       const serverTypes = MinecraftApi.getAvailableServerTypes();
       
@@ -167,7 +167,7 @@ namespace ServerController {
   });
 
   // Get latest versions (release and snapshot)
-  router.get('/latest', async (req: Request, res: Response) => {
+  router.get('/latest', async (_req: Request, res: Response) => {
     try {
       const latest = await MinecraftApi.getLatestVersions();
       
@@ -260,6 +260,28 @@ namespace ServerController {
         res.status(400).json({
           success: false,
           message: `Server with name "${name}" already exists`
+        });
+        return;
+      }
+
+      // Check server limit
+      const user = await User.findByPk(userId);
+      if (!user) {
+        res.status(401).json({
+          success: false,
+          message: 'User not found'
+        });
+        return;
+      }
+
+      const userServerCount = await MinecraftServer.count({
+        where: { userId }
+      });
+
+      if (userServerCount >= user.serverLimit) {
+        res.status(403).json({
+          success: false,
+          message: `Server limit exceeded. You can create up to ${user.serverLimit} server${user.serverLimit !== 1 ? 's' : ''}.`
         });
         return;
       }
@@ -371,12 +393,25 @@ namespace ServerController {
         return;
       }
 
-      const servers = await MinecraftServer.findByUser(userId);
+      const [servers, user] = await Promise.all([
+        MinecraftServer.findByUser(userId),
+        User.findByPk(userId)
+      ]);
+
+      if (!user) {
+        res.status(401).json({
+          success: false,
+          message: 'User not found'
+        });
+        return;
+      }
       
       res.json({
         success: true,
         data: {
           count: servers.length,
+          serverLimit: user.serverLimit,
+          canCreateMore: servers.length < user.serverLimit,
           servers: servers.map(server => server.getDisplayInfo())
         }
       });
@@ -462,7 +497,7 @@ namespace ServerController {
         .reduce((obj, key) => {
           obj[key] = updateData[key];
           return obj;
-        }, {} as any);
+        }, {} as Record<string, string | number | boolean>);
 
       await server.update(filteredUpdates);
 
