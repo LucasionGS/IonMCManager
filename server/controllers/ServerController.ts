@@ -533,6 +533,69 @@ namespace ServerController {
     }
   });
 
+  // Send command to a running server
+  router.post('/:serverId/command', AuthController.authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const { serverId } = req.params;
+      const { command } = req.body;
+      const userId = req.user?.id;
+
+      if (!userId) {
+        res.status(401).json({
+          success: false,
+          message: 'Authentication required'
+        });
+        return;
+      }
+
+      if (!command || typeof command !== 'string') {
+        res.status(400).json({
+          success: false,
+          message: 'Command is required and must be a string'
+        });
+        return;
+      }
+
+      const server = await MinecraftServer.findOne({
+        where: { id: serverId, userId }
+      });
+
+      if (!server) {
+        res.status(404).json({
+          success: false,
+          message: 'Server not found'
+        });
+        return;
+      }
+
+      const result = await serverControlService.sendCommand(server, command);
+
+      if (!result.success) {
+        res.status(400).json({
+          success: false,
+          message: result.message,
+          error: result.error
+        });
+        return;
+      }
+
+      res.json({
+        success: true,
+        message: result.message,
+        data: {
+          serverId: server.id,
+          command
+        }
+      });
+    } catch (error) {
+      console.error('Error sending command to server:', error);
+      res.status(500).json({
+        success: false,
+        message: error instanceof Error ? error.message : 'Failed to send command'
+      });
+    }
+  });
+
   // Server control actions (start, stop, restart)
   router.post('/:serverId/:action', AuthController.authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
     try {
@@ -637,69 +700,6 @@ namespace ServerController {
       res.status(500).json({
         success: false,
         message: error instanceof Error ? error.message : `Failed to ${req.params.action} server`
-      });
-    }
-  });
-
-  // Send command to a running server
-  router.post('/:serverId/command', AuthController.authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
-    try {
-      const { serverId } = req.params;
-      const { command } = req.body;
-      const userId = req.user?.id;
-
-      if (!userId) {
-        res.status(401).json({
-          success: false,
-          message: 'Authentication required'
-        });
-        return;
-      }
-
-      if (!command || typeof command !== 'string') {
-        res.status(400).json({
-          success: false,
-          message: 'Command is required and must be a string'
-        });
-        return;
-      }
-
-      const server = await MinecraftServer.findOne({
-        where: { id: serverId, userId }
-      });
-
-      if (!server) {
-        res.status(404).json({
-          success: false,
-          message: 'Server not found'
-        });
-        return;
-      }
-
-      const result = await serverControlService.sendCommand(server, command);
-
-      if (!result.success) {
-        res.status(400).json({
-          success: false,
-          message: result.message,
-          error: result.error
-        });
-        return;
-      }
-
-      res.json({
-        success: true,
-        message: result.message,
-        data: {
-          serverId: server.id,
-          command
-        }
-      });
-    } catch (error) {
-      console.error('Error sending command to server:', error);
-      res.status(500).json({
-        success: false,
-        message: error instanceof Error ? error.message : 'Failed to send command'
       });
     }
   });
@@ -878,54 +878,6 @@ namespace ServerController {
       res.status(500).json({
         success: false,
         message: error instanceof Error ? error.message : 'Failed to fetch server metrics'
-      });
-    }
-  });
-
-  // Send admin command to server
-  router.post('/:serverId/command', AuthController.authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
-    try {
-      const { serverId } = req.params;
-      const { command } = req.body;
-
-      if (!command || typeof command !== 'string') {
-        res.status(400).json({
-          success: false,
-          message: 'Command is required'
-        });
-        return;
-      }
-
-      const server = await MinecraftServer.findOne({
-        where: { 
-          id: parseInt(serverId),
-          userId: req.user!.id
-        }
-      });
-
-      if (!server) {
-        res.status(404).json({
-          success: false,
-          message: 'Server not found'
-        });
-        return;
-      }
-
-      const result = await serverControlService.sendCommand(server, command);
-
-      res.json({
-        success: result.success,
-        message: result.message,
-        data: {
-          command,
-          timestamp: new Date().toISOString()
-        }
-      });
-    } catch (error) {
-      console.error('Error sending command to server:', error);
-      res.status(500).json({
-        success: false,
-        message: error instanceof Error ? error.message : 'Failed to send command'
       });
     }
   });
