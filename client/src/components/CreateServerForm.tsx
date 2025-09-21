@@ -147,6 +147,7 @@ function CreateServerForm({ onClose, onServerCreated }: CreateServerFormProps) {
         name: formData.name.trim(),
         version: formData.version,
         serverType: formData.serverType,
+        forgeVersion: formData.serverType === 'forge' ? formData.forgeVersion : undefined,
         memory: formData.memory,
         description: formData.description.trim()
       });

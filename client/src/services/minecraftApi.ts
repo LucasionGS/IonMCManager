@@ -32,6 +32,7 @@ export interface CreateServerRequest {
   name: string;
   version: string;
   serverType: string;
+  forgeVersion?: string;
   memory?: number;
   description?: string;
   maxPlayers?: number;

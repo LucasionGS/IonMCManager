@@ -211,7 +211,20 @@ namespace ServerController {
   // Create a new server
   router.post('/create', AuthController.authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
     try {
-      const { name, version, serverType, memory, description, maxPlayers, motd, difficulty, gamemode, worldSeed, worldType } = req.body;
+      const { 
+        name, 
+        version, 
+        serverType, 
+        memory, 
+        description, 
+        maxPlayers, 
+        motd, 
+        difficulty, 
+        gamemode, 
+        worldSeed, 
+        worldType,
+        forgeVersion 
+      } = req.body;
       const userId = req.user?.id;
 
       // Authentication check
@@ -228,6 +241,15 @@ namespace ServerController {
         res.status(400).json({
           success: false,
           message: 'Name, version, and serverType are required'
+        });
+        return;
+      }
+
+      // Check if Forge version is provided for Forge servers
+      if (serverType === 'forge' && !forgeVersion) {
+        res.status(400).json({
+          success: false,
+          message: 'Forge version is required for Forge servers'
         });
         return;
       }
@@ -263,6 +285,26 @@ namespace ServerController {
         return;
       }
 
+      // Validate Forge version if provided
+      if (serverType === 'forge' && forgeVersion) {
+        try {
+          const availableForgeVersions = await MinecraftApi.getForgeVersions(version);
+          if (!availableForgeVersions.includes(forgeVersion)) {
+            res.status(400).json({
+              success: false,
+              message: `Invalid Forge version "${forgeVersion}" for Minecraft ${version}`
+            });
+            return;
+          }
+        } catch (error) {
+          res.status(400).json({
+            success: false,
+            message: `Failed to validate Forge version: ${error instanceof Error ? error.message : 'Unknown error'}`
+          });
+          return;
+        }
+      }
+
       // Create server in database
       const serverData: Omit<MinecraftServerCreationAttributes, "status"> = {
         userId,
@@ -270,6 +312,7 @@ namespace ServerController {
         description: description || '',
         minecraftVersion: version,
         serverType,
+        forgeVersion: serverType === 'forge' ? forgeVersion : undefined,
         memory: memory || 1024,
         maxPlayers: maxPlayers || 20,
         motd: motd || 'A Minecraft Server',

@@ -2,9 +2,13 @@ import { promises as fs } from "node:fs";
 import { join, dirname } from "node:path";
 import { existsSync, mkdirSync } from "node:fs";
 import process from "node:process";
+import { exec } from "node:child_process";
+import { promisify } from "node:util";
 import MinecraftApi from "../services/MinecraftApi.ts";
 import type MinecraftServer from "../database/models/MinecraftServer.ts";
 import { Buffer } from "node:buffer";
+
+const execAsync = promisify(exec);
 
 export interface ServerSetupConfig {
   serverInstance: MinecraftServer;
@@ -38,7 +42,7 @@ export default class ServerSetupService {
     
     try {
       // Create server directory structure
-      const serverPath = await this.createServerDirectory(serverInstance);
+      const serverPath = this.createServerDirectory(serverInstance);
       
       // Download server jar based on type
       const jarFile = await this.downloadServerJar(serverInstance, serverPath);
@@ -76,7 +80,7 @@ export default class ServerSetupService {
   /**
    * Create server directory structure
    */
-  private async createServerDirectory(serverInstance: MinecraftServer): Promise<string> {
+  private createServerDirectory(serverInstance: MinecraftServer): string {
     const serverDirName = `${serverInstance.id}-${serverInstance.name.replace(/[^a-zA-Z0-9-_]/g, '_')}`;
     const serverPath = join(this.basePath, serverDirName);
     
@@ -112,9 +116,8 @@ export default class ServerSetupService {
       downloadUrl = versionData.downloads.server.url;
       jarFileName = `minecraft-server-${minecraftVersion}.jar`;
     } else if (serverType === 'forge') {
-      // Download Forge server (for now, we'll use a placeholder)
-      // In a real implementation, you'd download the Forge installer and run it
-      throw new Error('Forge server setup not yet implemented. Please use vanilla servers for now.');
+      // Download and install Forge server
+      return await this.setupForgeServer(serverInstance, serverPath);
     } else if (serverType === 'paper') {
       // Download Paper server
       downloadUrl = `https://api.papermc.io/v2/projects/paper/versions/${minecraftVersion}/builds/latest/downloads/paper-${minecraftVersion}-latest.jar`;
@@ -134,6 +137,91 @@ export default class ServerSetupService {
     
     console.log(`Successfully downloaded server jar to: ${jarPath}`);
     return jarFileName;
+  }
+
+  /**
+   * Set up a Forge server by downloading the installer and running it
+   */
+  private async setupForgeServer(serverInstance: MinecraftServer, serverPath: string): Promise<string> {
+    const { minecraftVersion, forgeVersion } = serverInstance;
+    
+    if (!forgeVersion) {
+      throw new Error('Forge version is required for Forge server setup');
+    }
+    
+    // Download Forge installer
+    const installerFileName = `forge-${minecraftVersion}-${forgeVersion}-installer.jar`;
+    const installerUrl = `https://maven.minecraftforge.net/net/minecraftforge/forge/${minecraftVersion}-${forgeVersion}/forge-${minecraftVersion}-${forgeVersion}-installer.jar`;
+    const installerPath = join(serverPath, installerFileName);
+    
+    console.log(`Downloading Forge installer from: ${installerUrl}`);
+    await this.downloadFile(installerUrl, installerPath);
+    
+    // Run Forge installer to set up server
+    console.log(`Running Forge installer: ${installerFileName}`);
+    try {
+      const { stdout, stderr } = await execAsync(
+        `java -jar ${installerFileName} --installServer`,
+        { 
+          cwd: serverPath,
+          maxBuffer: 10 * 1024 * 1024, // 10MB buffer for Forge installer output
+          timeout: 300000 // 5 minute timeout for installation
+        }
+      );
+      
+      console.log('Forge installer completed successfully');
+      console.log('Forge installer output length:', stdout.length);
+      if (stderr) {
+        console.log('Forge installer stderr:', stderr);
+      }
+    } catch (error) {
+      console.error('Error running Forge installer:', error);
+      throw new Error(`Failed to run Forge installer: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+    
+    // The installer should create a server jar file
+    // For modern Forge versions, it creates a "forge-{version}-{forge}.jar" file
+    const expectedJarName = `forge-${minecraftVersion}-${forgeVersion}.jar`;
+    const expectedJarPath = join(serverPath, expectedJarName);
+    
+    // Check if the expected jar file exists
+    if (existsSync(expectedJarPath)) {
+      console.log(`Forge server jar created: ${expectedJarName}`);
+      
+      // Clean up installer
+      try {
+        await fs.unlink(installerPath);
+      } catch (error) {
+        console.warn('Failed to remove installer jar:', error);
+      }
+      
+      return expectedJarName;
+    }
+    
+    // If the expected jar doesn't exist, look for any jar files created
+    try {
+      const files = await fs.readdir(serverPath);
+      const jarFiles = files.filter(file => file.endsWith('.jar') && file !== installerFileName);
+      
+      if (jarFiles.length > 0) {
+        // Use the first jar file found (excluding installer)
+        const jarFile = jarFiles[0];
+        console.log(`Using Forge server jar: ${jarFile}`);
+        
+        // Clean up installer
+        try {
+          await fs.unlink(installerPath);
+        } catch (error) {
+          console.warn('Failed to remove installer jar:', error);
+        }
+        
+        return jarFile;
+      }
+    } catch (error) {
+      console.error('Error reading server directory:', error);
+    }
+    
+    throw new Error('Forge installer did not create a server jar file. The installation may have failed.');
   }
 
   /**
