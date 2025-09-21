@@ -1,6 +1,6 @@
 import sequelize from "../sequelize.ts";
 import { DataTypes, Model, Sequelize } from "sequelize";
-import bcrypt from "bcrypt";
+import bcrypt from "bcryptjs";
 import MinecraftServer from "./MinecraftServer.ts";
 
 export interface UserAttributes {

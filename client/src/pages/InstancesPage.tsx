@@ -337,18 +337,18 @@ function InstancesPage() {
                       </button>
                     )}
                     
-                    {server.status === 'running' && (
+                    {/* {server.status === 'running' && (
                       <button 
                         className="server-card__action server-card__action--restart"
                         onClick={() => handleServerAction(server.id, 'restart')}
                       >
                         Restart
                       </button>
-                    )}
+                    )} */}
                     
                     <button 
                       className="server-card__action server-card__action--manage"
-                      onClick={() => navigate(`/server/${server.id}/manage`)}
+                      onClick={() => navigate(`/servers/${server.id}/manage`)}
                     >
                       Manage
                     </button>

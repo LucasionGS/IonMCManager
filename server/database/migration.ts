@@ -32,7 +32,7 @@ export async function migrate() {
       } catch (error) {
         console.error(`Migration ${migration.version} failed:`, error);
         await qi.rollbackTransaction(t);
-        return;
+        throw error; // Re-throw to be handled by controller
       }
       await qi.commitTransaction(t);
       newMigrations.push(migration);
@@ -45,6 +45,56 @@ export async function migrate() {
   console.log("Current version:", metadata.version);
 
   return newMigrations.map(m => m.version);
+}
+
+export async function getMigrationStatus() {
+  try {
+    // Check if we can connect to the database
+    await sequelize.authenticate();
+    
+    // Check if migrations table exists
+    const migrationsTableExists = await sequelize.getQueryInterface().tableExists("Migrations");
+    
+    // Get all available migrations
+    const allMigrations = await getMigrationFiles();
+    
+    let appliedMigrations: string[] = [];
+    
+    if (migrationsTableExists) {
+      // Get applied migrations
+      appliedMigrations = await Migration.findAll().then(rows => rows.map(r => r.version));
+    }
+    
+    // Calculate pending migrations
+    const pendingMigrations = allMigrations
+      .map(m => m.version)
+      .filter(version => !appliedMigrations.includes(version));
+    
+    return {
+      canConnect: true,
+      migrationsTableExists,
+      totalMigrations: allMigrations.length,
+      appliedCount: appliedMigrations.length,
+      pendingCount: pendingMigrations.length,
+      appliedMigrations,
+      pendingMigrations,
+      requiresSetup: !migrationsTableExists || pendingMigrations.length > 0
+    };
+  } catch (error) {
+    // Database connection failed
+    const allMigrations = await getMigrationFiles();
+    return {
+      canConnect: false,
+      migrationsTableExists: false,
+      totalMigrations: allMigrations.length,
+      appliedCount: 0,
+      pendingCount: allMigrations.length,
+      appliedMigrations: [],
+      pendingMigrations: allMigrations.map(m => m.version),
+      requiresSetup: true,
+      error: error instanceof Error ? error.message : "Unknown error"
+    };
+  }
 }
 
 export async function rollbackMigration(count = 1) {
@@ -72,7 +122,7 @@ export async function rollbackMigration(count = 1) {
   return rolledbackMigrations.map(m => m.version);
 }
 
-async function getMigrationFiles(): Promise<DBMigration[]> {
+export async function getMigrationFiles(): Promise<DBMigration[]> {
   const migrations = await fs.promises.readdir(migrationsPath).then(
     files => files
     .filter(file => file.endsWith(".ts"))
