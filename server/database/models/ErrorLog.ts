@@ -24,23 +24,23 @@ export interface ErrorLogAttributes {
 export interface ErrorLogCreationAttributes extends Optional<ErrorLogAttributes, 'id' | 'stackTrace' | 'userId' | 'userAgent' | 'url' | 'method' | 'statusCode' | 'userInfo' | 'errorCode' | 'resolved' | 'resolvedBy' | 'resolvedAt' | 'createdAt' | 'updatedAt'> {}
 
 class ErrorLog extends Model<ErrorLogAttributes, ErrorLogCreationAttributes> implements ErrorLogAttributes {
-  public id!: number;
-  public message!: string;
-  public stackTrace!: string | null;
-  public source!: 'server' | 'client';
-  public severity!: 'low' | 'medium' | 'high' | 'critical';
-  public userId!: number | null;
-  public userAgent!: string | null;
-  public url!: string | null;
-  public method!: string | null;
-  public statusCode!: number | null;
-  public userInfo!: string | null;
-  public errorCode!: string | null;
-  public resolved!: boolean;
-  public resolvedBy!: number | null;
-  public resolvedAt!: Date | null;
-  public readonly createdAt!: Date;
-  public readonly updatedAt!: Date;
+  public declare id: number;
+  public declare message: string;
+  public declare stackTrace: string | null;
+  public declare source: 'server' | 'client';
+  public declare severity: 'low' | 'medium' | 'high' | 'critical';
+  public declare userId: number | null;
+  public declare userAgent: string | null;
+  public declare url: string | null;
+  public declare method: string | null;
+  public declare statusCode: number | null;
+  public declare userInfo: string | null;
+  public declare errorCode: string | null;
+  public declare resolved: boolean;
+  public declare resolvedBy: number | null;
+  public declare resolvedAt: Date | null;
+  public declare readonly createdAt: Date;
+  public declare readonly updatedAt: Date;
 
   // Static methods for queries
   static async getErrorLogs(options: {
