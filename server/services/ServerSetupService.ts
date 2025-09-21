@@ -119,6 +119,9 @@ export default class ServerSetupService {
     } else if (serverType === 'forge') {
       // Download and install Forge server
       return await this.setupForgeServer(serverInstance, serverPath);
+    } else if (serverType === 'neoforge') {
+      // Download and install NeoForge server
+      return await this.setupNeoForgeServer(serverInstance, serverPath);
     } else if (serverType === 'paper') {
       // Download Paper server
       downloadUrl = `https://api.papermc.io/v2/projects/paper/versions/${minecraftVersion}/builds/latest/downloads/paper-${minecraftVersion}-latest.jar`;
@@ -223,6 +226,156 @@ export default class ServerSetupService {
     }
     
     throw new Error('Forge installer did not create a server jar file. The installation may have failed.');
+  }
+
+  /**
+   * Set up a NeoForge server by downloading and running the installer
+   */
+  private async setupNeoForgeServer(serverInstance: MinecraftServer, serverPath: string): Promise<string> {
+    const { forgeVersion } = serverInstance;
+    
+    if (!forgeVersion) {
+      throw new Error('NeoForge version is required for NeoForge server setup');
+    }
+    
+    // NeoForge uses a different URL pattern than Forge
+    // Download NeoForge installer
+    const installerFileName = `neoforge-${forgeVersion}-installer.jar`;
+    const installerUrl = `https://maven.neoforged.net/releases/net/neoforged/neoforge/${forgeVersion}/neoforge-${forgeVersion}-installer.jar`;
+    const installerPath = join(serverPath, installerFileName);
+    
+    console.log(`Downloading NeoForge installer from: ${installerUrl}`);
+    await this.downloadFile(installerUrl, installerPath);
+    
+    // Run NeoForge installer to set up server
+    console.log(`Running NeoForge installer: ${installerFileName}`);
+    try {
+      const { stdout, stderr } = await execAsync(
+        `java -jar ${installerFileName} --installServer`,
+        { 
+          cwd: serverPath,
+          maxBuffer: 10 * 1024 * 1024, // 10MB buffer for NeoForge installer output
+          timeout: 300000 // 5 minute timeout for installation
+        }
+      );
+      
+      console.log('NeoForge installer completed successfully');
+      console.log('NeoForge installer output length:', stdout.length);
+      if (stderr) {
+        console.log('NeoForge installer stderr:', stderr);
+      }
+    } catch (error) {
+      console.error('Error running NeoForge installer:', error);
+      throw new Error(`Failed to run NeoForge installer: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+    
+    // The installer should create a run script instead of a jar file
+    // For NeoForge, it creates "run.sh" and "run.bat" scripts
+    const runScriptPath = join(serverPath, 'run.sh');
+    const runBatPath = join(serverPath, 'run.bat');
+    
+    // Check if the run scripts exist
+    if (existsSync(runScriptPath) || existsSync(runBatPath)) {
+      console.log(`NeoForge server scripts created successfully`);
+      
+      // Make run.sh executable if it exists
+      if (existsSync(runScriptPath)) {
+        try {
+          await execAsync(`chmod +x run.sh`, { cwd: serverPath });
+          console.log('Made run.sh executable');
+        } catch (error) {
+          console.warn('Failed to make run.sh executable:', error);
+        }
+      }
+      
+      // Create user_jvm_args.txt file with memory settings for NeoForge
+      await this.createNeoForgeJvmArgs(serverInstance, serverPath);
+      
+      // Clean up installer
+      try {
+        await fs.unlink(installerPath);
+      } catch (error) {
+        console.warn('Failed to remove installer jar:', error);
+      }
+      
+      // Return the script name that should be used for startup
+      return existsSync(runScriptPath) ? 'run.sh' : 'run.bat';
+    }
+    
+    // If the expected scripts don't exist, look for any jar files created (fallback)
+    try {
+      const files = await fs.readdir(serverPath);
+      const jarFiles = files.filter(file => file.endsWith('.jar') && file !== installerFileName);
+      
+      if (jarFiles.length > 0) {
+        // Use the first jar file found (excluding installer)
+        const jarFile = jarFiles[0];
+        console.log(`Using NeoForge server jar as fallback: ${jarFile}`);
+        
+        // Clean up installer
+        try {
+          await fs.unlink(installerPath);
+        } catch (error) {
+          console.warn('Failed to remove installer jar:', error);
+        }
+        
+        return jarFile;
+      }
+    } catch (error) {
+      console.error('Error reading server directory:', error);
+    }
+    
+    throw new Error('NeoForge installer did not create run scripts or server jar file. The installation may have failed.');
+  }
+
+  /**
+   * Create user_jvm_args.txt file for NeoForge servers with appropriate memory settings
+   */
+  private async createNeoForgeJvmArgs(serverInstance: MinecraftServer, serverPath: string): Promise<void> {
+    await this.updateNeoForgeJvmArgs(serverInstance, serverPath);
+  }
+
+  /**
+   * Update user_jvm_args.txt file for NeoForge servers with new memory settings
+   * This can be called when server memory configuration changes
+   */
+  async updateNeoForgeJvmArgs(serverInstance: MinecraftServer, serverPath?: string): Promise<void> {
+    const { memory } = serverInstance;
+    const minMemory = Math.floor(memory * 0.5); // Use 50% of allocated memory as minimum
+    const path = serverPath || serverInstance.serverPath;
+    
+    if (!path) {
+      throw new Error('Server path is required to update JVM arguments');
+    }
+    
+    const jvmArgsContent = [
+      '# Xmx and Xms set the maximum and minimum RAM usage, respectively.',
+      '# They can take any number, followed by an M or a G.',
+      '# M means Megabyte, G means Gigabyte.',
+      '# For example, to set the maximum to 3GB: -Xmx3G',
+      '# To set the minimum to 2.5GB: -Xms2500M',
+      '',
+      '# Memory settings configured by IonMC Manager',
+      `-Xms${minMemory}M`,
+      `-Xmx${memory}M`,
+      '',
+      '# Additional JVM optimizations for modded servers',
+      '-XX:+UseG1GC',
+      '-XX:+UnlockExperimentalVMOptions',
+      '-XX:MaxGCPauseMillis=100',
+      '-XX:+DisableExplicitGC',
+      '-XX:TargetSurvivorRatio=90',
+      '-XX:G1NewSizePercent=50',
+      '-XX:G1MaxNewSizePercent=80',
+      '-XX:G1MixedGCLiveThresholdPercent=35',
+      '-XX:+AlwaysPreTouch',
+      '-XX:+UseLargePagesInMetaspace',
+      ''
+    ].join('\n');
+    
+    const jvmArgsPath = join(path, 'user_jvm_args.txt');
+    await fs.writeFile(jvmArgsPath, jvmArgsContent);
+    console.log(`Updated user_jvm_args.txt with ${memory}MB max memory for NeoForge server`);
   }
 
   /**

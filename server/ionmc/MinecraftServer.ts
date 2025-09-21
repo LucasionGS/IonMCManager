@@ -9,7 +9,7 @@ export interface MinecraftServerConfig {
   id: string;
   name: string;
   serverPath: string;
-  jarFile: string;
+  jarFile: string; // Can be a .jar file or a script file (.sh/.bat) for NeoForge
   minMemory: string;
   maxMemory: string;
   javaArgs?: string[];
@@ -64,8 +64,16 @@ export default class MinecraftServer extends EventEmitter {
     }
 
     const jarPath = join(this.config.serverPath, this.config.jarFile);
-    if (!existsSync(jarPath)) {
+    
+    // Check if jarFile is actually a script (for NeoForge)
+    const isScript = this.config.jarFile.endsWith('.sh') || this.config.jarFile.endsWith('.bat');
+    
+    if (!isScript && !existsSync(jarPath)) {
       throw new Error(`Server jar file not found: ${jarPath}`);
+    }
+    
+    if (isScript && !existsSync(jarPath)) {
+      throw new Error(`Server script file not found: ${jarPath}`);
     }
 
     this.setStatus('starting');
@@ -73,17 +81,43 @@ export default class MinecraftServer extends EventEmitter {
     this.restartAttempts = 0;
 
     try {
-      const javaArgs = [
-        `-Xms${this.config.minMemory}`,
-        `-Xmx${this.config.maxMemory}`,
-        ...(this.config.javaArgs || []),
-        '-jar',
-        this.config.jarFile,
-        '--nogui',
-        ...(this.config.serverArgs || [])
-      ];
+      let command: string;
+      let args: string[];
 
-      this.childProcess = spawn('java', javaArgs, {
+      if (isScript) {
+        // For script-based servers (like NeoForge)
+        if (this.config.jarFile.endsWith('.sh')) {
+          // Unix shell script
+          command = 'bash';
+          args = [this.config.jarFile];
+        } else if (this.config.jarFile.endsWith('.bat')) {
+          // Windows batch file
+          if (process.platform === 'win32') {
+            command = 'cmd';
+            args = ['/c', this.config.jarFile];
+          } else {
+            // On non-Windows systems, try to run with wine or throw an error
+            command = 'wine';
+            args = ['cmd', '/c', this.config.jarFile];
+          }
+        } else {
+          throw new Error(`Unsupported script type: ${this.config.jarFile}`);
+        }
+      } else {
+        // Traditional jar-based servers (Vanilla, Forge, Paper, etc.)
+        command = 'java';
+        args = [
+          `-Xms${this.config.minMemory}`,
+          `-Xmx${this.config.maxMemory}`,
+          ...(this.config.javaArgs || []),
+          '-jar',
+          this.config.jarFile,
+          '--nogui',
+          ...(this.config.serverArgs || [])
+        ];
+      }
+
+      this.childProcess = spawn(command, args, {
         cwd: this.config.serverPath,
         env: { ...process.env },
         stdio: ['pipe', 'pipe', 'pipe']

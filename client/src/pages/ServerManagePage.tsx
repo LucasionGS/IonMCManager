@@ -106,9 +106,9 @@ function ServerManagePage() {
     loadServerData();
   }, [serverId, navigate]);
 
-  // Load mods for Forge servers
+  // Load mods for Forge and NeoForge servers
   const loadMods = async () => {
-    if (!serverId || serverData?.serverType !== 'forge') return;
+    if (!serverId || (serverData?.serverType !== 'forge' && serverData?.serverType !== 'neoforge')) return;
     
     try {
       setModLoading(true);
@@ -127,9 +127,9 @@ function ServerManagePage() {
     }
   };
 
-  // Load mods when server data is loaded and it's a Forge server
+  // Load mods when server data is loaded and it's a modded server
   useEffect(() => {
-    if (serverData?.serverType === 'forge') {
+    if (serverData?.serverType === 'forge' || serverData?.serverType === 'neoforge') {
       loadMods();
     }
   }, [serverData]);
@@ -540,7 +540,7 @@ function ServerManagePage() {
             >
               Console
             </button>
-            {serverData?.serverType === 'forge' && (
+            {(serverData?.serverType === 'forge' || serverData?.serverType === 'neoforge') && (
               <button 
                 className={`tab-btn ${activeTab === 'mods' ? 'active' : ''}`}
                 onClick={() => setActiveTab('mods')}
@@ -592,7 +592,7 @@ function ServerManagePage() {
               </div>
             )}
 
-            {activeTab === 'mods' && serverData?.serverType === 'forge' && (
+            {activeTab === 'mods' && (serverData?.serverType === 'forge' || serverData?.serverType === 'neoforge') && (
               <div className="mods-panel">
                 {modError && (
                   <div className="error-message">{modError}</div>

@@ -163,6 +163,20 @@ class MinecraftApiService {
   }
 
   /**
+   * Get available NeoForge versions for a Minecraft version
+   */
+  async getNeoForgeVersions(minecraftVersion: string): Promise<ForgeVersion[]> {
+    const response = await fetch(`${this.baseUrl}/neoforge-versions/${minecraftVersion}`);
+    const data = await response.json();
+    
+    if (!data.success) {
+      throw new Error(data.message || 'Failed to fetch NeoForge versions');
+    }
+    
+    return data.data.neoforgeVersions.map((v: any) => ({ version: v.version, downloadUrl: v.downloadUrl }));
+  }
+
+  /**
    * Get latest release and snapshot versions
    */
   async getLatestVersions(): Promise<{ release: string; snapshot: string }> {

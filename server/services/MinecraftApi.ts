@@ -172,6 +172,61 @@ export namespace MinecraftApi {
   }
 
   /**
+   * Gets available NeoForge versions for a given Minecraft version
+   * @param minecraftVersion The Minecraft version to get NeoForge versions for
+   * @returns Promise<string[]> Array of available NeoForge versions
+   */
+  export async function getNeoForgeVersions(minecraftVersion: string): Promise<string[]> {
+    try {
+      if (minecraftVersion === "latest") {
+        const manifest = await getServerVersions();
+        minecraftVersion = manifest.latest.release;
+      }
+
+      // NeoForge uses Maven metadata to list versions
+      const metadataUrl = 'https://maven.neoforged.net/releases/net/neoforged/neoforge/maven-metadata.xml';
+      const response = await fetch(metadataUrl);
+      
+      if (!response.ok) {
+        throw new Error(`Failed to fetch NeoForge versions: ${response.status} ${response.statusText}`);
+      }
+
+      const xml = await response.text();
+      
+      // Parse XML to extract versions that match the Minecraft version
+      const versionPattern = /<version>([^<]+)<\/version>/g;
+      const versions = new Set<string>();
+      let match;
+
+      while ((match = versionPattern.exec(xml)) !== null) {
+        const version = match[1];
+        // NeoForge versions typically start with the MC version (e.g., "20.1.10" for MC 1.20.1)
+        // We'll include all versions for now and let the frontend handle filtering
+        if (version && !version.includes('alpha') && !version.includes('beta')) {
+          versions.add(version);
+        }
+      }
+
+      return Array.from(versions).sort((a, b) => {
+        // Sort versions in descending order (newest first)
+        const aParts = a.split('.').map(n => parseInt(n));
+        const bParts = b.split('.').map(n => parseInt(n));
+        
+        for (let i = 0; i < Math.max(aParts.length, bParts.length); i++) {
+          const aNum = aParts[i] || 0;
+          const bNum = bParts[i] || 0;
+          if (aNum !== bNum) {
+            return bNum - aNum;
+          }
+        }
+        return 0;
+      });
+    } catch (error) {
+      throw new Error(`Error fetching NeoForge versions: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  /**
    * Gets available server types that can be installed
    * @returns Array of supported server types
    */
@@ -190,6 +245,13 @@ export namespace MinecraftApi {
         description: 'Modded Minecraft server with Forge mod support',
         category: 'modded',
         supportsVersions: ['1.7.10', '1.12.2', '1.16.5', '1.18.2', '1.19.2', '1.20.1'] // Common Forge versions
+      },
+      {
+        id: 'neoforge',
+        name: 'NeoForge',
+        description: 'Modern Minecraft server with NeoForge mod support (Forge-compatible)',
+        category: 'modded',
+        supportsVersions: ['1.20.1', '1.20.2', '1.20.4', '1.21'] // NeoForge started from 1.20.1
       },
       {
         id: 'fabric',

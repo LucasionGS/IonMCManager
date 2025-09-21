@@ -28,7 +28,6 @@ namespace ServerController {
       fileSize: 100 * 1024 * 1024, // 100MB max file size
       fieldSize: 100 * 1024 * 1024, // 100MB max field size
       fields: 10, // Max number of non-file fields
-      files: 1 // Max number of files
     },
     fileFilter: (_req: Request, file: Express.Multer.File, cb: FileFilterCallback) => {
       // Allow .jar files for mods and .json files for manifests
@@ -193,6 +192,43 @@ namespace ServerController {
     }
   });
 
+  // Get NeoForge versions for a Minecraft version
+  router.get('/neoforge-versions/:minecraftVersion', async (req: Request, res: Response) => {
+    try {
+      const { minecraftVersion } = req.params;
+      
+      // Validate Minecraft version first
+      const isValid = await MinecraftApi.validateVersion(minecraftVersion);
+      if (!isValid && minecraftVersion !== 'latest') {
+        res.status(404).json({
+          success: false,
+          message: `Minecraft version "${minecraftVersion}" not found`
+        });
+        return;
+      }
+
+      const neoforgeVersions = await MinecraftApi.getNeoForgeVersions(minecraftVersion);
+      
+      res.json({
+        success: true,
+        data: {
+          minecraftVersion,
+          count: neoforgeVersions.length,
+          neoforgeVersions: neoforgeVersions.map(version => ({
+            version,
+            downloadUrl: `https://maven.neoforged.net/releases/net/neoforged/neoforge/${version}/neoforge-${version}-installer.jar`
+          }))
+        }
+      });
+    } catch (error) {
+      console.error('Error fetching NeoForge versions:', error);
+      res.status(500).json({
+        success: false,
+        message: error instanceof Error ? error.message : 'Failed to fetch NeoForge versions'
+      });
+    }
+  });
+
   // Get latest versions (release and snapshot)
   router.get('/latest', async (_req: Request, res: Response) => {
     try {
@@ -281,6 +317,15 @@ namespace ServerController {
         return;
       }
 
+      // Check if NeoForge version is provided for NeoForge servers
+      if (serverType === 'neoforge' && !forgeVersion) {
+        res.status(400).json({
+          success: false,
+          message: 'NeoForge version is required for NeoForge servers'
+        });
+        return;
+      }
+
       // Check if server name already exists for this user
       const existingServer = await MinecraftServer.findByUserAndName(userId, name);
       if (existingServer) {
@@ -354,6 +399,26 @@ namespace ServerController {
         }
       }
 
+      // Validate NeoForge version if provided
+      if (serverType === 'neoforge' && forgeVersion) {
+        try {
+          const availableNeoForgeVersions = await MinecraftApi.getNeoForgeVersions(version);
+          if (!availableNeoForgeVersions.includes(forgeVersion)) {
+            res.status(400).json({
+              success: false,
+              message: `Invalid NeoForge version "${forgeVersion}" for Minecraft ${version}`
+            });
+            return;
+          }
+        } catch (error) {
+          res.status(400).json({
+            success: false,
+            message: `Failed to validate NeoForge version: ${error instanceof Error ? error.message : 'Unknown error'}`
+          });
+          return;
+        }
+      }
+
       // Create server in database
       const serverData: Omit<MinecraftServerCreationAttributes, "status"> = {
         userId,
@@ -361,7 +426,7 @@ namespace ServerController {
         description: description || '',
         minecraftVersion: version,
         serverType,
-        forgeVersion: serverType === 'forge' ? forgeVersion : undefined,
+        forgeVersion: (serverType === 'forge' || serverType === 'neoforge') ? forgeVersion : undefined,
         memory: memory || 1024,
         maxPlayers: maxPlayers || 20,
         motd: motd || 'A Minecraft Server',
@@ -527,6 +592,19 @@ namespace ServerController {
         }, {} as Record<string, string | number | boolean>);
 
       await server.update(filteredUpdates);
+
+      // If memory was updated for a NeoForge server, update the user_jvm_args.txt file
+      if (filteredUpdates.memory && server.serverType === 'neoforge') {
+        try {
+          const { default: ServerControlService } = await import('../services/ServerControlService.ts');
+          const controlService = new ServerControlService();
+          await controlService.updateNeoForgeMemory(server);
+          console.log(`Updated NeoForge memory configuration for server ${server.name}`);
+        } catch (error) {
+          console.warn('Failed to update NeoForge memory configuration:', error);
+          // Don't fail the entire update if this fails
+        }
+      }
 
       res.json({
         success: true,
@@ -856,8 +934,8 @@ namespace ServerController {
         });
       }
 
-      // Only Forge servers support mods
-      if (server.serverType !== 'forge') {
+      // Only Forge and NeoForge servers support mods
+      if (server.serverType !== 'forge' && server.serverType !== 'neoforge') {
         return res.status(400).json({
           success: false,
           message: 'This server type does not support mods'
@@ -908,8 +986,8 @@ namespace ServerController {
         });
       }
 
-      // Only Forge servers support mods
-      if (server.serverType !== 'forge') {
+      // Only Forge and NeoForge servers support mods
+      if (server.serverType !== 'forge' && server.serverType !== 'neoforge') {
         return res.status(400).json({
           success: false,
           message: 'This server type does not support mods'
@@ -1021,7 +1099,7 @@ namespace ServerController {
         });
       }
 
-      if (server.serverType !== 'forge') {
+      if (server.serverType !== 'forge' && server.serverType !== 'neoforge') {
         return res.status(400).json({
           success: false,
           message: 'This server type does not support mods'
@@ -1061,7 +1139,7 @@ namespace ServerController {
         });
       }
 
-      if (server.serverType !== 'forge') {
+      if (server.serverType !== 'forge' && server.serverType !== 'neoforge') {
         return res.status(400).json({
           success: false,
           message: 'This server type does not support mods'
@@ -1101,7 +1179,7 @@ namespace ServerController {
         });
       }
 
-      if (server.serverType !== 'forge') {
+      if (server.serverType !== 'forge' && server.serverType !== 'neoforge') {
         return res.status(400).json({
           success: false,
           message: 'This server type does not support mods'
@@ -1142,7 +1220,7 @@ namespace ServerController {
         });
       }
 
-      if (server.serverType !== 'forge') {
+      if (server.serverType !== 'forge' && server.serverType !== 'neoforge') {
         return res.status(400).json({
           success: false,
           message: 'This server type does not support mods'
@@ -1195,7 +1273,7 @@ namespace ServerController {
         });
       }
 
-      if (server.serverType !== 'forge') {
+      if (server.serverType !== 'forge' && server.serverType !== 'neoforge') {
         return res.status(400).json({
           success: false,
           message: 'This server type does not support mods'

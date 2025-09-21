@@ -349,4 +349,43 @@ export default class ServerControlService {
     await Promise.all(stopPromises);
     this.runningServers.clear();
   }
+
+  /**
+   * Update NeoForge server memory configuration by updating user_jvm_args.txt
+   */
+  async updateNeoForgeMemory(serverInstance: MinecraftServer): Promise<ServerControlResult> {
+    try {
+      if (serverInstance.serverType !== 'neoforge') {
+        return {
+          success: false,
+          message: 'This method is only for NeoForge servers'
+        };
+      }
+
+      if (!serverInstance.serverPath) {
+        return {
+          success: false,
+          message: 'Server path not found'
+        };
+      }
+
+      // Import ServerSetupService to update JVM args
+      const { default: ServerSetupService } = await import('./ServerSetupService.ts');
+      const setupService = new ServerSetupService();
+      
+      await setupService.updateNeoForgeJvmArgs(serverInstance);
+
+      return {
+        success: true,
+        message: 'NeoForge memory configuration updated successfully'
+      };
+    } catch (error) {
+      console.error('Failed to update NeoForge memory configuration:', error);
+      return {
+        success: false,
+        message: 'Failed to update memory configuration',
+        error: error instanceof Error ? error.message : String(error)
+      };
+    }
+  }
 }

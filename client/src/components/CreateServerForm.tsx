@@ -57,15 +57,21 @@ function CreateServerForm({ onClose, onServerCreated }: CreateServerFormProps) {
     loadInitialData();
   }, []);
 
-  // Load Forge versions when Minecraft version or server type changes
+  // Load Forge/NeoForge versions when Minecraft version or server type changes
   useEffect(() => {
-    const loadForgeVersions = async () => {
-      if (formData.serverType === 'forge' && formData.version) {
+    const loadModdedVersions = async () => {
+      if ((formData.serverType === 'forge' || formData.serverType === 'neoforge') && formData.version) {
         try {
-          const versions = await minecraftApiService.getForgeVersions(formData.version);
+          let versions;
+          if (formData.serverType === 'forge') {
+            versions = await minecraftApiService.getForgeVersions(formData.version);
+          } else {
+            versions = await minecraftApiService.getNeoForgeVersions(formData.version);
+          }
+          
           setForgeVersions(versions);
           
-          // Set default Forge version to the latest
+          // Set default version to the latest
           if (versions.length > 0) {
             setFormData(prev => ({
               ...prev,
@@ -73,7 +79,7 @@ function CreateServerForm({ onClose, onServerCreated }: CreateServerFormProps) {
             }));
           }
         } catch (error) {
-          console.error('Error loading Forge versions:', error);
+          console.error(`Error loading ${formData.serverType} versions:`, error);
           setForgeVersions([]);
         }
       } else {
@@ -81,7 +87,7 @@ function CreateServerForm({ onClose, onServerCreated }: CreateServerFormProps) {
       }
     };
 
-    loadForgeVersions();
+    loadModdedVersions();
   }, [formData.version, formData.serverType]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
@@ -142,12 +148,16 @@ function CreateServerForm({ onClose, onServerCreated }: CreateServerFormProps) {
         throw new Error('Forge version is required for Forge servers');
       }
 
+      if (formData.serverType === 'neoforge' && !formData.forgeVersion) {
+        throw new Error('NeoForge version is required for NeoForge servers');
+      }
+
       // Create server
       const serverData = await minecraftApiService.createServer({
         name: formData.name.trim(),
         version: formData.version,
         serverType: formData.serverType,
-        forgeVersion: formData.serverType === 'forge' ? formData.forgeVersion : undefined,
+        forgeVersion: (formData.serverType === 'forge' || formData.serverType === 'neoforge') ? formData.forgeVersion : undefined,
         memory: formData.memory,
         description: formData.description.trim()
       });
@@ -294,10 +304,10 @@ function CreateServerForm({ onClose, onServerCreated }: CreateServerFormProps) {
             </select>
           </div>
 
-          {formData.serverType === 'forge' && (
+          {(formData.serverType === 'forge' || formData.serverType === 'neoforge') && (
             <div className="create-server-form__field">
               <label htmlFor="forgeVersion" className="create-server-form__label">
-                Forge Version
+                {formData.serverType === 'forge' ? 'Forge Version' : 'NeoForge Version'}
               </label>
               <select
                 id="forgeVersion"

@@ -14,7 +14,7 @@ export interface MinecraftServerAttributes {
   memory: number;
   port?: number;
   serverPath?: string;
-  jarFile?: string;
+  jarFile?: string; // Server executable: .jar file for most types, script file (.sh/.bat) for NeoForge
   maxPlayers: number;
   motd?: string;
   difficulty: 'peaceful' | 'easy' | 'normal' | 'hard';
