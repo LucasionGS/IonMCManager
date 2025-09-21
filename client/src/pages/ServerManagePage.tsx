@@ -135,13 +135,13 @@ function ServerManagePage() {
   }, [serverData]);
 
   // Mod management handlers
-  const handleUploadMod = async (file: File) => {
+  const handleUploadMods = async (files: File[]) => {
     if (!serverId) return;
     try {
-      await minecraftApiService.uploadMod(serverId, file);
+      await minecraftApiService.uploadMods(serverId, files);
       await loadMods();
     } catch (error) {
-      setModError('Failed to upload mod');
+      setModError('Failed to upload mods');
     }
   };
 
@@ -599,7 +599,7 @@ function ServerManagePage() {
                 )}
                 <div className="mods-section">
                   <ModUpload 
-                    onUploadMod={handleUploadMod}
+                    onUploadMods={handleUploadMods}
                     onInstallFromCurseForge={handleInstallFromCurseForge}
                     onInstallFromManifest={handleInstallFromManifest}
                     loading={modLoading}

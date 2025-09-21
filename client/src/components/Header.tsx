@@ -1,4 +1,3 @@
-import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import './Header.scss';
 
@@ -8,7 +7,6 @@ interface HeaderProps {
 
 function Header({ onMenuToggle }: HeaderProps) {
   const { authState, logout } = useAuth();
-  const location = useLocation();
 
   const handleLogout = () => {
     logout();

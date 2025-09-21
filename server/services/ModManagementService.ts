@@ -83,11 +83,11 @@ export interface CurseForgeManifest {
 
 export default class ModManagementService {
   private getServerModsPath(serverId: string): string {
-    return path.join('/tmp/minecraft/servers', serverId, 'mods');
+    return path.join('/app/minecraft_servers', serverId, 'mods');
   }
 
   private getServerPath(serverId: string): string {
-    return path.join('/tmp/minecraft/servers', serverId);
+    return path.join('/app/minecraft_servers', serverId);
   }
 
   async ensureModsDirectory(serverId: string): Promise<void> {

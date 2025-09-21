@@ -538,11 +538,22 @@ class MinecraftApiService {
   }
 
   /**
-   * Upload mod file
+   * Upload single mod file
    */
   async uploadMod(serverId: string, file: File) {
+    return this.uploadMods(serverId, [file]);
+  }
+
+  /**
+   * Upload multiple mod files
+   */
+  async uploadMods(serverId: string, files: File[]) {
     const formData = new FormData();
-    formData.append('modFile', file);
+    
+    // Append all files with the same field name that multer expects
+    files.forEach(file => {
+      formData.append('modFiles', file);
+    });
 
     const token = localStorage.getItem('token');
     const headers: Record<string, string> = {};
@@ -559,7 +570,7 @@ class MinecraftApiService {
     const data = await response.json();
     
     if (!data.success) {
-      throw new Error(data.message || 'Failed to upload mod');
+      throw new Error(data.message || 'Failed to upload mod(s)');
     }
     
     return data.data;

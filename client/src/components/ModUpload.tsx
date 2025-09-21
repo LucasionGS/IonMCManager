@@ -2,14 +2,14 @@ import React, { useState, useRef } from 'react';
 import './ModUpload.scss';
 
 interface ModUploadProps {
-  onUploadMod: (file: File) => Promise<void>;
+  onUploadMods: (files: File[]) => Promise<void>; // Support multiple files
   onInstallFromCurseForge: (modId: number, fileId?: number) => Promise<void>;
   onInstallFromManifest: (manifest: any) => Promise<void>;
   loading?: boolean;
 }
 
 const ModUpload: React.FC<ModUploadProps> = ({
-  onUploadMod,
+  onUploadMods,
   onInstallFromCurseForge,
   onInstallFromManifest,
   loading = false
@@ -19,18 +19,36 @@ const ModUpload: React.FC<ModUploadProps> = ({
   const [fileId, setFileId] = useState('');
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
   const [error, setError] = useState<string>('');
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   
   const fileInputRef = useRef<HTMLInputElement>(null);
   const manifestInputRef = useRef<HTMLInputElement>(null);
 
-  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-
-    if (!file.name.endsWith('.jar')) {
-      setError('Please select a .jar file');
+  const handleFileSelection = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(event.target.files || []);
+    
+    // Filter for .jar files only
+    const jarFiles = files.filter(file => file.name.endsWith('.jar'));
+    
+    if (jarFiles.length !== files.length) {
+      setError('Only .jar files are allowed for mod uploads');
       return;
     }
+    
+    if (jarFiles.length === 0) {
+      setError('Please select at least one .jar file');
+      return;
+    }
+    
+    setError('');
+    setSelectedFiles(jarFiles);
+    
+    // Don't auto-upload for multi-file selection - let user review first
+    // handleFileUpload(jarFiles);
+  };
+
+  const handleFileUpload = async (files: File[]) => {
+    if (files.length === 0) return;
 
     setError('');
     setUploadProgress(0);
@@ -45,20 +63,31 @@ const ModUpload: React.FC<ModUploadProps> = ({
         });
       }, 100);
 
-      await onUploadMod(file);
+      await onUploadMods(files);
       
       clearInterval(progressInterval);
       setUploadProgress(100);
       
       setTimeout(() => {
         setUploadProgress(null);
+        setSelectedFiles([]);
         if (fileInputRef.current) {
           fileInputRef.current.value = '';
         }
       }, 1000);
     } catch (error) {
       setUploadProgress(null);
-      setError(error instanceof Error ? error.message : 'Upload failed');
+      setError(error instanceof Error ? error.message : 'Failed to upload mod files');
+    }
+  };
+
+  const removeFile = (index: number) => {
+    const newFiles = selectedFiles.filter((_, i) => i !== index);
+    setSelectedFiles(newFiles);
+    
+    // Reset file input if no files remain
+    if (newFiles.length === 0 && fileInputRef.current) {
+      fileInputRef.current.value = '';
     }
   };
 
@@ -149,15 +178,16 @@ const ModUpload: React.FC<ModUploadProps> = ({
       <div className="mod-upload__content">
         {activeTab === 'file' && (
           <div className="mod-upload__panel">
-            <h3>Upload Mod File</h3>
-            <p>Select a .jar file to upload to your server.</p>
+            <h3>Upload Mod Files</h3>
+            <p>Select one or more .jar files to upload to your server.</p>
             
             <div className="mod-upload__file-area">
               <input
                 ref={fileInputRef}
                 type="file"
+                multiple
                 accept=".jar"
-                onChange={handleFileUpload}
+                onChange={handleFileSelection}
                 disabled={loading || uploadProgress !== null}
                 className="mod-upload__file-input"
                 id="mod-file-input"
@@ -177,13 +207,49 @@ const ModUpload: React.FC<ModUploadProps> = ({
                     </>
                   ) : (
                     <>
-                      <strong>Choose a .jar file</strong>
+                      <strong>Choose .jar files</strong>
                       <span>or drag and drop here</span>
                     </>
                   )}
                 </div>
               </label>
             </div>
+            
+            {selectedFiles.length > 0 && uploadProgress === null && (
+              <div className="mod-upload__selected-files">
+                <h4>Selected Files ({selectedFiles.length})</h4>
+                <ul className="mod-upload__file-list">
+                  {selectedFiles.map((file, index) => (
+                    <li key={index} className="mod-upload__file-item">
+                      <div className="mod-upload__file-item__info">
+                        <p className="mod-upload__file-item__name">{file.name}</p>
+                        <p className="mod-upload__file-item__size">
+                          {(file.size / 1024 / 1024).toFixed(2)} MB
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        className="mod-upload__file-item__remove"
+                        onClick={() => removeFile(index)}
+                        title="Remove file"
+                      >
+                        ✕
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+                <div className="mod-upload__upload-actions">
+                  <button
+                    type="button"
+                    className="mod-upload__upload-button"
+                    onClick={() => handleFileUpload(selectedFiles)}
+                    disabled={loading || uploadProgress !== null}
+                  >
+                    Upload {selectedFiles.length} {selectedFiles.length === 1 ? 'File' : 'Files'}
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         )}
 

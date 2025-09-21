@@ -81,7 +81,8 @@ export default class ServerSetupService {
    * Create server directory structure
    */
   private createServerDirectory(serverInstance: MinecraftServer): string {
-    const serverDirName = `${serverInstance.id}-${serverInstance.name.replace(/[^a-zA-Z0-9-_]/g, '_')}`;
+    // const serverDirName = `${serverInstance.id}-${serverInstance.name.replace(/[^a-zA-Z0-9-_]/g, '_')}`;
+    const serverDirName = `${serverInstance.id}`;
     const serverPath = join(this.basePath, serverDirName);
     
     // Create main server directory

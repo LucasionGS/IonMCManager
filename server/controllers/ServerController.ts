@@ -1,4 +1,4 @@
-import { Router, Request, Response, NextFunction } from "express";
+import { Router, Request, Response } from "express";
 import multer, { FileFilterCallback } from "multer";
 import MinecraftApi from "../services/MinecraftApi.ts";
 import MinecraftServer, { MinecraftServerCreationAttributes } from "../database/models/MinecraftServer.ts";
@@ -879,19 +879,19 @@ namespace ServerController {
     }
   });
 
-  // Upload mod file or install from CurseForge
-  router.post('/:serverId/mods', AuthController.authenticateToken, upload.single('modFile'), async (req: AuthenticatedRequest, res: Response) => {
+  // Upload mod file(s) or install from CurseForge
+  router.post('/:serverId/mods', AuthController.authenticateToken, upload.array('modFiles', 100), async (req: AuthenticatedRequest, res: Response) => {
     try {
       const { serverId } = req.params;
       const user = req.user!;
-      const file = req.file;
+      const files = req.files as Express.Multer.File[] | undefined;
       const { curseForgeId, fileId, manifest } = req.body;
 
       console.log('Upload request received:', {
         serverId,
-        hasFile: !!file,
-        fileSize: file?.size,
-        filename: file?.originalname,
+        hasFiles: !!files && files.length > 0,
+        fileCount: files?.length || 0,
+        filenames: files?.map(f => f.originalname) || [],
         curseForgeId,
         fileId
       });
@@ -918,12 +918,33 @@ namespace ServerController {
 
       let result;
 
-      if (file) {
-        // Upload mod file
-        await modManagementService.uploadMod(serverId, file.buffer, file.originalname);
+      if (files && files.length > 0) {
+        // Upload multiple mod files
+        const uploadResults = [];
+        
+        for (const file of files) {
+          try {
+            await modManagementService.uploadMod(serverId, file.buffer, file.originalname);
+            uploadResults.push({
+              filename: file.originalname,
+              success: true
+            });
+          } catch (error) {
+            console.error(`Failed to upload ${file.originalname}:`, error);
+            uploadResults.push({
+              filename: file.originalname,
+              success: false,
+              error: error instanceof Error ? error.message : 'Upload failed'
+            });
+          }
+        }
+        
         result = {
           type: 'upload',
-          filename: file.originalname
+          uploadResults,
+          totalFiles: files.length,
+          successCount: uploadResults.filter(r => r.success).length,
+          failureCount: uploadResults.filter(r => !r.success).length
         };
       } else if (curseForgeId) {
         // Install from CurseForge
@@ -969,7 +990,9 @@ namespace ServerController {
       res.json({
         success: true,
         data: result,
-        message: 'Mod(s) installed successfully'
+        message: result.type === 'upload' 
+          ? `${result.successCount} of ${result.totalFiles} mod(s) uploaded successfully`
+          : 'Mod(s) installed successfully'
       });
     } catch (error) {
       console.error('Error installing mod:', error);
