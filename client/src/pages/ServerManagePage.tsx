@@ -2,6 +2,9 @@ import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useSocket } from '../contexts/SocketContext';
 import minecraftApiService from '../services/minecraftApi';
+import ModsList from '../components/ModsList';
+import ModUpload from '../components/ModUpload';
+import CurseForgeModBrowser from '../components/CurseForgeModBrowser';
 import './ServerManagePage.scss';
 
 interface ServerData {
@@ -55,11 +58,17 @@ function ServerManagePage() {
   
   const [serverData, setServerData] = useState<ServerData | null>(null);
   const [runtimeData, setRuntimeData] = useState<RuntimeData | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [commandInput, setCommandInput] = useState('');
   const [consoleOutput, setConsoleOutput] = useState<string[]>([]);
+  const [commandInput, setCommandInput] = useState('');
   const [isCommandLoading, setIsCommandLoading] = useState(false);
+  const [activeTab, setActiveTab] = useState<'console' | 'mods' | 'settings'>('console');
+  
+  // Mod management state
+  const [mods, setMods] = useState<{ enabled: any[], disabled: any[] } | null>(null);
+  const [modLoading, setModLoading] = useState(false);
+  const [modError, setModError] = useState('');
   
   const consoleRef = useRef<HTMLDivElement>(null);
   const commandInputRef = useRef<HTMLInputElement>(null);
@@ -80,7 +89,7 @@ function ServerManagePage() {
 
     const loadServerData = async () => {
       try {
-        setIsLoading(true);
+        setLoading(true);
         setError('');
         const data = await minecraftApiService.getServerManagementData(parseInt(serverId));
         setServerData(data.server);
@@ -90,12 +99,107 @@ function ServerManagePage() {
         console.error('Error loading server data:', err);
         setError(err instanceof Error ? err.message : 'Failed to load server data');
       } finally {
-        setIsLoading(false);
+        setLoading(false);
       }
     };
 
     loadServerData();
   }, [serverId, navigate]);
+
+  // Load mods for Forge servers
+  const loadMods = async () => {
+    if (!serverId || serverData?.serverType !== 'forge') return;
+    
+    try {
+      setModLoading(true);
+      setModError('');
+      const response = await minecraftApiService.getServerMods(serverId);
+      if (response.enabled && response.disabled) {
+        setMods(response.enabled && response.disabled ? response : { enabled: [], disabled: [] });
+      } else {
+        setModError((response as any)?.message || 'Failed to load mods');
+      }
+    } catch (err) {
+      console.error('Error loading mods:', err);
+      setModError('Failed to load mods');
+    } finally {
+      setModLoading(false);
+    }
+  };
+
+  // Load mods when server data is loaded and it's a Forge server
+  useEffect(() => {
+    if (serverData?.serverType === 'forge') {
+      loadMods();
+    }
+  }, [serverData]);
+
+  // Mod management handlers
+  const handleUploadMod = async (file: File) => {
+    if (!serverId) return;
+    try {
+      await minecraftApiService.uploadMod(serverId, file);
+      await loadMods();
+    } catch (error) {
+      setModError('Failed to upload mod');
+    }
+  };
+
+  const handleInstallFromCurseForge = async (modId: number, fileId?: number) => {
+    if (!serverId) return;
+    try {
+      await minecraftApiService.installModFromCurseForge(serverId, modId, fileId);
+      await loadMods();
+    } catch (error) {
+      setModError('Failed to install mod from CurseForge');
+    }
+  };
+
+  const handleInstallFromManifest = async (manifest: any) => {
+    if (!serverId) return;
+    try {
+      // Implement manifest installation
+      console.log('Installing mod from manifest:', manifest);
+      await loadMods();
+    } catch (error) {
+      setModError('Failed to install mod from manifest');
+    }
+  };
+
+  const handleSearchMods = async (query: string, gameVersion?: string, pageSize?: number, index?: number) => {
+    if (!serverId) throw new Error('Server ID not available');
+    return await minecraftApiService.searchCurseForgeMods(serverId, query, gameVersion, undefined, pageSize || 20, index || 0);
+  };
+
+  const handleDeleteMod = async (filename: string) => {
+    if (!serverId) return;
+    try {
+      await minecraftApiService.deleteMod(serverId, filename);
+      await loadMods();
+    } catch (error) {
+      setModError('Failed to delete mod');
+    }
+  };
+
+  const handleEnableMod = async (filename: string) => {
+    if (!serverId) return;
+    try {
+      await minecraftApiService.enableMod(serverId, filename);
+      await loadMods();
+    } catch (error) {
+      setModError('Failed to enable mod');
+    }
+  };
+
+  const handleDisableMod = async (filename: string) => {
+    if (!serverId) return;
+    try {
+      await minecraftApiService.disableMod(serverId, filename);
+      await loadMods();
+    } catch (error) {
+      setModError('Failed to disable mod');
+    }
+  };
 
   // Auto-scroll when console output changes
   useEffect(() => {
@@ -265,7 +369,7 @@ function ServerManagePage() {
     }
   };
 
-  if (isLoading) {
+  if (loading) {
     return (
       <div className="server-manage-page">
         <div className="server-manage-page__loading">
@@ -428,37 +532,105 @@ function ServerManagePage() {
         </div>
 
         <div className="server-manage-page__right">
-          {/* Console */}
-          <div className="console-panel">
-            <h3>Server Console</h3>
-            <div className="console-output" ref={consoleRef}>
-              {consoleOutput.length === 0 ? (
-                <div className="console-empty">
-                  {runtimeData?.isRunning ? 'Waiting for output...' : 'Server is not running'}
+          {/* Tab Navigation */}
+          <div className="tab-navigation">
+            <button 
+              className={`tab-btn ${activeTab === 'console' ? 'active' : ''}`}
+              onClick={() => setActiveTab('console')}
+            >
+              Console
+            </button>
+            {serverData?.serverType === 'forge' && (
+              <button 
+                className={`tab-btn ${activeTab === 'mods' ? 'active' : ''}`}
+                onClick={() => setActiveTab('mods')}
+              >
+                Mods
+              </button>
+            )}
+            <button 
+              className={`tab-btn ${activeTab === 'settings' ? 'active' : ''}`}
+              onClick={() => setActiveTab('settings')}
+            >
+              Settings
+            </button>
+          </div>
+
+          {/* Tab Content */}
+          <div className="tab-content">
+            {activeTab === 'console' && (
+              <div className="console-panel">
+                <div className="console-output" ref={consoleRef}>
+                  {consoleOutput.length === 0 ? (
+                    <div className="console-empty">
+                      {runtimeData?.isRunning ? 'Waiting for output...' : 'Server is not running'}
+                    </div>
+                  ) : (
+                    consoleOutput.map((line, index) => (
+                      <div key={index} className={`console-line ${getLogLevelClass(line)}`}>
+                        {line}
+                      </div>
+                    ))
+                  )}
                 </div>
-              ) : (
-                consoleOutput.map((line, index) => (
-                  <div key={index} className={`console-line ${getLogLevelClass(line)}`}>
-                    {line}
-                  </div>
-                ))
-              )}
-            </div>
-            
-            {runtimeData?.isRunning && (
-              <form className="console-input" onSubmit={handleSendCommand}>
-                <input
-                  ref={commandInputRef}
-                  type="text"
-                  value={commandInput}
-                  onChange={(e) => setCommandInput(e.target.value)}
-                  placeholder="Enter server command..."
-                  disabled={isCommandLoading}
-                />
-                <button type="submit" disabled={isCommandLoading || !commandInput.trim()}>
-                  {isCommandLoading ? '...' : 'Send'}
-                </button>
-              </form>
+                
+                {runtimeData?.isRunning && (
+                  <form className="console-input" onSubmit={handleSendCommand}>
+                    <input
+                      ref={commandInputRef}
+                      type="text"
+                      value={commandInput}
+                      onChange={(e) => setCommandInput(e.target.value)}
+                      placeholder="Enter server command..."
+                      disabled={isCommandLoading}
+                    />
+                    <button type="submit" disabled={isCommandLoading || !commandInput.trim()}>
+                      {isCommandLoading ? '...' : 'Send'}
+                    </button>
+                  </form>
+                )}
+              </div>
+            )}
+
+            {activeTab === 'mods' && serverData?.serverType === 'forge' && (
+              <div className="mods-panel">
+                {modError && (
+                  <div className="error-message">{modError}</div>
+                )}
+                <div className="mods-section">
+                  <ModUpload 
+                    onUploadMod={handleUploadMod}
+                    onInstallFromCurseForge={handleInstallFromCurseForge}
+                    onInstallFromManifest={handleInstallFromManifest}
+                    loading={modLoading}
+                  />
+                </div>
+                <div className="mods-section">
+                  <CurseForgeModBrowser 
+                    onInstallMod={handleInstallFromCurseForge}
+                    onSearchMods={handleSearchMods}
+                    gameVersion={serverData.minecraftVersion}
+                    loading={modLoading}
+                  />
+                </div>
+                <div className="mods-section">
+                  {mods && (
+                    <ModsList 
+                      mods={mods}
+                      onDeleteMod={handleDeleteMod}
+                      onEnableMod={handleEnableMod}
+                      onDisableMod={handleDisableMod}
+                      loading={modLoading}
+                    />
+                  )}
+                </div>
+              </div>
+            )}
+
+            {activeTab === 'settings' && (
+              <div className="settings-panel">
+                <p>Server settings panel coming soon...</p>
+              </div>
             )}
           </div>
         </div>

@@ -4,7 +4,6 @@ import { Server } from "socket.io";
 import cors from "cors";
 import process from "node:process";
 import ApiController from "./controllers/ApiController.ts";
-import sequelize from "./database/sequelize.ts";
 import metadata from "./metadata.ts";
 import MonitoringService from "./services/MonitoringService.ts";
 
@@ -37,8 +36,17 @@ const corsOptions = {
 
 // Middleware
 app.use(cors(corsOptions));
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+app.use(express.json({ limit: '100mb' })); // Increase JSON payload limit
+app.use(express.urlencoded({ extended: true, limit: '100mb' })); // Increase URL encoded payload limit
+
+// Configure request timeout for the entire app
+app.use((req, _res, next) => {
+  // Set longer timeout for file upload routes
+  if (req.path.includes('/mods') && req.method === 'POST') {
+    req.setTimeout(300000); // 5 minutes for file uploads
+  }
+  next();
+});
 
 // Routes
 app.use("/api", ApiController.router);
@@ -57,7 +65,7 @@ io.on("connection", (socket) => {
 });
 
 // Start server
-async function startServer() {
+function startServer() {
   try {
     // Start monitoring service
     monitoringService.startCollection();
@@ -73,4 +81,4 @@ async function startServer() {
   }
 }
 
-startServer().catch(console.error);
+startServer();

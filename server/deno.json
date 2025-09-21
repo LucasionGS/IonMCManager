@@ -8,6 +8,7 @@
     "@types/express": "npm:@types/express@^5.0.3",
     "@types/express-session": "npm:@types/express-session@^1.18.2",
     "@types/jsonwebtoken": "npm:@types/jsonwebtoken@^9.0.10",
+    "@types/multer": "npm:@types/multer@^2.0.0",
     "@types/node": "npm:@types/node@^24.5.2",
     "@types/sequelize": "npm:@types/sequelize@^6.12.0",
     "bcryptjs": "npm:bcryptjs@^3.0.2",
@@ -15,6 +16,7 @@
     "express": "npm:express@^5.1.0",
     "express-session": "npm:express-session@^1.18.2",
     "jsonwebtoken": "npm:jsonwebtoken@^9.0.2",
+    "multer": "npm:multer@^2.0.2",
     "mysql2": "npm:mysql2@^3.15.0",
     "sequelize": "npm:sequelize@^6.37.7",
     "socket.io": "npm:socket.io@^4.8.1"

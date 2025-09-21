@@ -1,10 +1,12 @@
-import { Router, Request, Response } from "express";
+import { Router, Request, Response, NextFunction } from "express";
+import multer, { FileFilterCallback } from "multer";
 import MinecraftApi from "../services/MinecraftApi.ts";
 import MinecraftServer, { MinecraftServerCreationAttributes } from "../database/models/MinecraftServer.ts";
 import User from "../database/models/User.ts";
 import AuthController from "./AuthController.ts";
 import ServerSetupService from "../services/ServerSetupService.ts";
 import ServerControlService from "../services/ServerControlService.ts";
+import ModManagementService from "../services/ModManagementService.ts";
 
 interface AuthenticatedRequest extends Request {
   user?: User;
@@ -16,6 +18,31 @@ namespace ServerController {
   // Initialize services
   const serverSetupService = new ServerSetupService();
   const serverControlService = new ServerControlService();
+  const modManagementService = new ModManagementService();
+
+  // Configure multer for file uploads
+  const storage = multer.memoryStorage();
+  const upload = multer({ 
+    storage,
+    limits: {
+      fileSize: 100 * 1024 * 1024, // 100MB max file size
+      fieldSize: 100 * 1024 * 1024, // 100MB max field size
+      fields: 10, // Max number of non-file fields
+      files: 1 // Max number of files
+    },
+    fileFilter: (_req: Request, file: Express.Multer.File, cb: FileFilterCallback) => {
+      // Allow .jar files for mods and .json files for manifests
+      if (file.mimetype === 'application/java-archive' || 
+          file.originalname.endsWith('.jar') ||
+          file.mimetype === 'application/json' ||
+          file.originalname.endsWith('.json') ||
+          file.mimetype === 'application/octet-stream') { // Some browsers send .jar as octet-stream
+        cb(null, true);
+      } else {
+        cb(new Error(`File type not allowed: ${file.mimetype}. Only .jar and .json files are allowed.`));
+      }
+    }
+  });
 
   // Get available Minecraft versions
   router.get('/versions', async (_req: Request, res: Response) => {
@@ -631,114 +658,6 @@ namespace ServerController {
     }
   });
 
-  // Server control actions (start, stop, restart)
-  router.post('/:serverId/:action', AuthController.authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
-    try {
-      const { serverId, action } = req.params;
-      const userId = req.user?.id;
-
-      if (!userId) {
-        res.status(401).json({
-          success: false,
-          message: 'Authentication required'
-        });
-        return;
-      }
-
-      if (!['start', 'stop', 'restart'].includes(action)) {
-        res.status(400).json({
-          success: false,
-          message: 'Invalid action. Must be start, stop, or restart'
-        });
-        return;
-      }
-
-      const server = await MinecraftServer.findOne({
-        where: { id: serverId, userId }
-      });
-
-      if (!server) {
-        res.status(404).json({
-          success: false,
-          message: 'Server not found'
-        });
-        return;
-      }
-
-      // Check if action is valid for current status
-      if (action === 'start' && server.isRunning()) {
-        res.status(400).json({
-          success: false,
-          message: 'Server is already running'
-        });
-        return;
-      }
-
-      if (action === 'stop' && server.isStopped()) {
-        res.status(400).json({
-          success: false,
-          message: 'Server is already stopped'
-        });
-        return;
-      }
-
-      if (server.isTransitioning()) {
-        res.status(400).json({
-          success: false,
-          message: 'Server is currently transitioning. Please wait.'
-        });
-        return;
-      }
-
-      // Update status based on action
-      let newStatus: 'starting' | 'stopping';
-      if (action === 'start') {
-        newStatus = 'starting';
-      } else if (action === 'stop') {
-        newStatus = 'stopping';
-      } else { // restart
-        newStatus = 'stopping'; // First stop, then will start
-      }
-
-      await server.updateStatus(newStatus);
-
-      // Execute the actual server control action
-      let controlResult;
-      if (action === 'start') {
-        controlResult = await serverControlService.startServer(server);
-      } else if (action === 'stop') {
-        controlResult = await serverControlService.stopServer(server);
-      } else { // restart
-        controlResult = await serverControlService.restartServer(server);
-      }
-
-      if (!controlResult.success) {
-        res.status(500).json({
-          success: false,
-          message: controlResult.message,
-          error: controlResult.error
-        });
-        return;
-      }
-
-      res.json({
-        success: true,
-        message: controlResult.message,
-        data: {
-          serverId: server.id,
-          action,
-          status: server.status
-        }
-      });
-    } catch (error) {
-      console.error(`Error ${req.params.action}ing server:`, error);
-      res.status(500).json({
-        success: false,
-        message: error instanceof Error ? error.message : `Failed to ${req.params.action} server`
-      });
-    }
-  });
-
   // Get server console output
   router.get('/:serverId/console', AuthController.authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
     try {
@@ -913,6 +832,473 @@ namespace ServerController {
       res.status(500).json({
         success: false,
         message: error instanceof Error ? error.message : 'Failed to fetch server metrics'
+      });
+    }
+  });
+
+  // ==================== MOD MANAGEMENT ENDPOINTS ====================
+
+  // Get server mods
+  router.get('/:serverId/mods', AuthController.authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const { serverId } = req.params;
+      const user = req.user!;
+
+      // Verify server exists and user has access
+      const server = await MinecraftServer.findOne({
+        where: { id: serverId, userId: user.id }
+      });
+
+      if (!server) {
+        return res.status(404).json({
+          success: false,
+          message: 'Server not found'
+        });
+      }
+
+      // Only Forge servers support mods
+      if (server.serverType !== 'forge') {
+        return res.status(400).json({
+          success: false,
+          message: 'This server type does not support mods'
+        });
+      }
+
+      const mods = await modManagementService.listMods(serverId);
+
+      res.json({
+        success: true,
+        data: mods
+      });
+    } catch (error) {
+      console.error('Error fetching server mods:', error);
+      res.status(500).json({
+        success: false,
+        message: error instanceof Error ? error.message : 'Failed to fetch server mods'
+      });
+    }
+  });
+
+  // Upload mod file or install from CurseForge
+  router.post('/:serverId/mods', AuthController.authenticateToken, upload.single('modFile'), async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const { serverId } = req.params;
+      const user = req.user!;
+      const file = req.file;
+      const { curseForgeId, fileId, manifest } = req.body;
+
+      console.log('Upload request received:', {
+        serverId,
+        hasFile: !!file,
+        fileSize: file?.size,
+        filename: file?.originalname,
+        curseForgeId,
+        fileId
+      });
+
+      // Verify server exists and user has access
+      const server = await MinecraftServer.findOne({
+        where: { id: serverId, userId: user.id }
+      });
+
+      if (!server) {
+        return res.status(404).json({
+          success: false,
+          message: 'Server not found'
+        });
+      }
+
+      // Only Forge servers support mods
+      if (server.serverType !== 'forge') {
+        return res.status(400).json({
+          success: false,
+          message: 'This server type does not support mods'
+        });
+      }
+
+      let result;
+
+      if (file) {
+        // Upload mod file
+        await modManagementService.uploadMod(serverId, file.buffer, file.originalname);
+        result = {
+          type: 'upload',
+          filename: file.originalname
+        };
+      } else if (curseForgeId) {
+        // Install from CurseForge
+        const modId = parseInt(curseForgeId);
+        const modFileId = fileId ? parseInt(fileId) : undefined;
+        
+        if (isNaN(modId)) {
+          return res.status(400).json({
+            success: false,
+            message: 'Invalid CurseForge mod ID'
+          });
+        }
+
+        const modInfo = await modManagementService.downloadModFromCurseForge(serverId, modId, modFileId);
+        result = {
+          type: 'curseforge',
+          mod: modInfo
+        };
+      } else if (manifest) {
+        // Install from CurseForge manifest
+        let manifestData;
+        try {
+          manifestData = typeof manifest === 'string' ? JSON.parse(manifest) : manifest;
+        } catch (_error) {
+          return res.status(400).json({
+            success: false,
+            message: 'Invalid manifest format'
+          });
+        }
+
+        const installedMods = await modManagementService.installModsFromManifest(serverId, manifestData);
+        result = {
+          type: 'manifest',
+          mods: installedMods
+        };
+      } else {
+        return res.status(400).json({
+          success: false,
+          message: 'No mod file, CurseForge ID, or manifest provided'
+        });
+      }
+
+      res.json({
+        success: true,
+        data: result,
+        message: 'Mod(s) installed successfully'
+      });
+    } catch (error) {
+      console.error('Error installing mod:', error);
+      res.status(500).json({
+        success: false,
+        message: error instanceof Error ? error.message : 'Failed to install mod'
+      });
+    }
+  });
+
+  // Delete mod
+  router.delete('/:serverId/mods/:filename', AuthController.authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const { serverId, filename } = req.params;
+      const user = req.user!;
+
+      // Verify server exists and user has access
+      const server = await MinecraftServer.findOne({
+        where: { id: serverId, userId: user.id }
+      });
+
+      if (!server) {
+        return res.status(404).json({
+          success: false,
+          message: 'Server not found'
+        });
+      }
+
+      if (server.serverType !== 'forge') {
+        return res.status(400).json({
+          success: false,
+          message: 'This server type does not support mods'
+        });
+      }
+
+      await modManagementService.deleteMod(serverId, filename);
+
+      res.json({
+        success: true,
+        message: 'Mod deleted successfully'
+      });
+    } catch (error) {
+      console.error('Error deleting mod:', error);
+      res.status(500).json({
+        success: false,
+        message: error instanceof Error ? error.message : 'Failed to delete mod'
+      });
+    }
+  });
+
+  // Enable mod
+  router.put('/:serverId/mods/:filename/enable', AuthController.authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const { serverId, filename } = req.params;
+      const user = req.user!;
+
+      // Verify server exists and user has access
+      const server = await MinecraftServer.findOne({
+        where: { id: serverId, userId: user.id }
+      });
+
+      if (!server) {
+        return res.status(404).json({
+          success: false,
+          message: 'Server not found'
+        });
+      }
+
+      if (server.serverType !== 'forge') {
+        return res.status(400).json({
+          success: false,
+          message: 'This server type does not support mods'
+        });
+      }
+
+      await modManagementService.enableMod(serverId, filename);
+
+      res.json({
+        success: true,
+        message: 'Mod enabled successfully'
+      });
+    } catch (error) {
+      console.error('Error enabling mod:', error);
+      res.status(500).json({
+        success: false,
+        message: error instanceof Error ? error.message : 'Failed to enable mod'
+      });
+    }
+  });
+
+  // Disable mod
+  router.put('/:serverId/mods/:filename/disable', AuthController.authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const { serverId, filename } = req.params;
+      const user = req.user!;
+
+      // Verify server exists and user has access
+      const server = await MinecraftServer.findOne({
+        where: { id: serverId, userId: user.id }
+      });
+
+      if (!server) {
+        return res.status(404).json({
+          success: false,
+          message: 'Server not found'
+        });
+      }
+
+      if (server.serverType !== 'forge') {
+        return res.status(400).json({
+          success: false,
+          message: 'This server type does not support mods'
+        });
+      }
+
+      await modManagementService.disableMod(serverId, filename);
+
+      res.json({
+        success: true,
+        message: 'Mod disabled successfully'
+      });
+    } catch (error) {
+      console.error('Error disabling mod:', error);
+      res.status(500).json({
+        success: false,
+        message: error instanceof Error ? error.message : 'Failed to disable mod'
+      });
+    }
+  });
+
+  // Search CurseForge mods
+  router.get('/:serverId/mods/search', AuthController.authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const { serverId } = req.params;
+      const { query, gameVersion, categoryId, pageSize = 20, index = 0 } = req.query;
+      const user = req.user!;
+
+      // Verify server exists and user has access
+      const server = await MinecraftServer.findOne({
+        where: { id: serverId, userId: user.id }
+      });
+
+      if (!server) {
+        return res.status(404).json({
+          success: false,
+          message: 'Server not found'
+        });
+      }
+
+      if (server.serverType !== 'forge') {
+        return res.status(400).json({
+          success: false,
+          message: 'This server type does not support mods'
+        });
+      }
+
+      if (!query || typeof query !== 'string') {
+        return res.status(400).json({
+          success: false,
+          message: 'Search query is required'
+        });
+      }
+
+      const searchResults = await modManagementService.searchCurseForgeMods(
+        query,
+        gameVersion as string,
+        categoryId ? parseInt(categoryId as string) : undefined,
+        parseInt(pageSize as string),
+        parseInt(index as string)
+      );
+
+      res.json({
+        success: true,
+        data: searchResults
+      });
+    } catch (error) {
+      console.error('Error searching CurseForge mods:', error);
+      res.status(500).json({
+        success: false,
+        message: error instanceof Error ? error.message : 'Failed to search mods'
+      });
+    }
+  });
+
+  // Get server mod compatibility info
+  router.get('/:serverId/mods/compatibility', AuthController.authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const { serverId } = req.params;
+      const user = req.user!;
+
+      // Verify server exists and user has access
+      const server = await MinecraftServer.findOne({
+        where: { id: serverId, userId: user.id }
+      });
+
+      if (!server) {
+        return res.status(404).json({
+          success: false,
+          message: 'Server not found'
+        });
+      }
+
+      if (server.serverType !== 'forge') {
+        return res.status(400).json({
+          success: false,
+          message: 'This server type does not support mods'
+        });
+      }
+
+      const compatibility = await modManagementService.getModpackCompatibility(serverId);
+
+      res.json({
+        success: true,
+        data: compatibility
+      });
+    } catch (error) {
+      console.error('Error fetching mod compatibility:', error);
+      res.status(500).json({
+        success: false,
+        message: error instanceof Error ? error.message : 'Failed to fetch mod compatibility'
+      });
+    }
+  });
+
+  // Server control actions (start, stop, restart)
+  // This has to be at the end to avoid route conflicts with other endpoints
+  router.post('/:serverId/:action', AuthController.authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const { serverId, action } = req.params;
+      const userId = req.user?.id;
+
+      if (!userId) {
+        res.status(401).json({
+          success: false,
+          message: 'Authentication required'
+        });
+        return;
+      }
+
+      if (!['start', 'stop', 'restart'].includes(action)) {
+        res.status(400).json({
+          success: false,
+          message: 'Invalid action. Must be start, stop, or restart'
+        });
+        return;
+      }
+
+      const server = await MinecraftServer.findOne({
+        where: { id: serverId, userId }
+      });
+
+      if (!server) {
+        res.status(404).json({
+          success: false,
+          message: 'Server not found'
+        });
+        return;
+      }
+
+      // Check if action is valid for current status
+      if (action === 'start' && server.isRunning()) {
+        res.status(400).json({
+          success: false,
+          message: 'Server is already running'
+        });
+        return;
+      }
+
+      if (action === 'stop' && server.isStopped()) {
+        res.status(400).json({
+          success: false,
+          message: 'Server is already stopped'
+        });
+        return;
+      }
+
+      if (server.isTransitioning()) {
+        res.status(400).json({
+          success: false,
+          message: 'Server is currently transitioning. Please wait.'
+        });
+        return;
+      }
+
+      // Update status based on action
+      let newStatus: 'starting' | 'stopping';
+      if (action === 'start') {
+        newStatus = 'starting';
+      } else if (action === 'stop') {
+        newStatus = 'stopping';
+      } else { // restart
+        newStatus = 'stopping'; // First stop, then will start
+      }
+
+      await server.updateStatus(newStatus);
+
+      // Execute the actual server control action
+      let controlResult;
+      if (action === 'start') {
+        controlResult = await serverControlService.startServer(server);
+      } else if (action === 'stop') {
+        controlResult = await serverControlService.stopServer(server);
+      } else { // restart
+        controlResult = await serverControlService.restartServer(server);
+      }
+
+      if (!controlResult.success) {
+        res.status(500).json({
+          success: false,
+          message: controlResult.message,
+          error: controlResult.error
+        });
+        return;
+      }
+
+      res.json({
+        success: true,
+        message: controlResult.message,
+        data: {
+          serverId: server.id,
+          action,
+          status: server.status
+        }
+      });
+    } catch (error) {
+      console.error(`Error ${req.params.action}ing server:`, error);
+      res.status(500).json({
+        success: false,
+        message: error instanceof Error ? error.message : `Failed to ${req.params.action} server`
       });
     }
   });

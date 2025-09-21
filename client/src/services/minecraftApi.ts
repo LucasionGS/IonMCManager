@@ -515,6 +515,186 @@ class MinecraftApiService {
     
     return data.data;
   }
+
+  // ==================== MOD MANAGEMENT ====================
+
+  /**
+   * Get server mods (Forge only)
+   */
+  async getServerMods(serverId: string): Promise<{
+    disabled: string[];
+    enabled: string[];
+  }> {
+    const response = await fetch(`/api/servers/${serverId}/mods`, {
+      headers: this.getAuthHeaders(),
+    });
+    const data = await response.json();
+    
+    if (!data.success) {
+      throw new Error(data.message || 'Failed to fetch server mods');
+    }
+    
+    return data.data;
+  }
+
+  /**
+   * Upload mod file
+   */
+  async uploadMod(serverId: string, file: File) {
+    const formData = new FormData();
+    formData.append('modFile', file);
+
+    const token = localStorage.getItem('token');
+    const headers: Record<string, string> = {};
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+    // Don't set Content-Type for FormData - browser will set it automatically with boundary
+
+    const response = await fetch(`/api/servers/${serverId}/mods`, {
+      method: 'POST',
+      headers,
+      body: formData,
+    });
+    const data = await response.json();
+    
+    if (!data.success) {
+      throw new Error(data.message || 'Failed to upload mod');
+    }
+    
+    return data.data;
+  }
+
+  /**
+   * Install mod from CurseForge
+   */
+  async installModFromCurseForge(serverId: string, curseForgeId: number, fileId?: number) {
+    const body: any = { curseForgeId };
+    if (fileId) body.fileId = fileId;
+
+    const response = await fetch(`/api/servers/${serverId}/mods`, {
+      method: 'POST',
+      headers: this.getAuthHeaders(),
+      body: JSON.stringify(body),
+    });
+    const data = await response.json();
+    
+    if (!data.success) {
+      throw new Error(data.message || 'Failed to install mod from CurseForge');
+    }
+    
+    return data.data;
+  }
+
+  /**
+   * Install mods from CurseForge manifest
+   */
+  async installModsFromManifest(serverId: string, manifest: any) {
+    const response = await fetch(`/api/servers/${serverId}/mods`, {
+      method: 'POST',
+      headers: this.getAuthHeaders(),
+      body: JSON.stringify({ manifest }),
+    });
+    const data = await response.json();
+    
+    if (!data.success) {
+      throw new Error(data.message || 'Failed to install mods from manifest');
+    }
+    
+    return data.data;
+  }
+
+  /**
+   * Delete mod
+   */
+  async deleteMod(serverId: string, filename: string) {
+    const response = await fetch(`/api/servers/${serverId}/mods/${encodeURIComponent(filename)}`, {
+      method: 'DELETE',
+      headers: this.getAuthHeaders(),
+    });
+    const data = await response.json();
+    
+    if (!data.success) {
+      throw new Error(data.message || 'Failed to delete mod');
+    }
+    
+    return data.data;
+  }
+
+  /**
+   * Enable mod
+   */
+  async enableMod(serverId: string, filename: string) {
+    const response = await fetch(`/api/servers/${serverId}/mods/${encodeURIComponent(filename)}/enable`, {
+      method: 'PUT',
+      headers: this.getAuthHeaders(),
+    });
+    const data = await response.json();
+    
+    if (!data.success) {
+      throw new Error(data.message || 'Failed to enable mod');
+    }
+    
+    return data.data;
+  }
+
+  /**
+   * Disable mod
+   */
+  async disableMod(serverId: string, filename: string) {
+    const response = await fetch(`/api/servers/${serverId}/mods/${encodeURIComponent(filename)}/disable`, {
+      method: 'PUT',
+      headers: this.getAuthHeaders(),
+    });
+    const data = await response.json();
+    
+    if (!data.success) {
+      throw new Error(data.message || 'Failed to disable mod');
+    }
+    
+    return data.data;
+  }
+
+  /**
+   * Search CurseForge mods
+   */
+  async searchCurseForgeMods(serverId: string, query: string, gameVersion?: string, categoryId?: number, pageSize: number = 20, index: number = 0) {
+    const params = new URLSearchParams({
+      query,
+      pageSize: pageSize.toString(),
+      index: index.toString(),
+    });
+
+    if (gameVersion) params.set('gameVersion', gameVersion);
+    if (categoryId) params.set('categoryId', categoryId.toString());
+
+    const response = await fetch(`/api/servers/${serverId}/mods/search?${params}`, {
+      headers: this.getAuthHeaders(),
+    });
+    const data = await response.json();
+    
+    if (!data.success) {
+      throw new Error(data.message || 'Failed to search CurseForge mods');
+    }
+    
+    return data.data;
+  }
+
+  /**
+   * Get server mod compatibility info
+   */
+  async getModCompatibility(serverId: string) {
+    const response = await fetch(`/api/servers/${serverId}/mods/compatibility`, {
+      headers: this.getAuthHeaders(),
+    });
+    const data = await response.json();
+    
+    if (!data.success) {
+      throw new Error(data.message || 'Failed to fetch mod compatibility');
+    }
+    
+    return data.data;
+  }
 }
 
 export const minecraftApiService = new MinecraftApiService();
